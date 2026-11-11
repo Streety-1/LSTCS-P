@@ -74,6 +74,10 @@ add_compile_definitions(_GNU_SOURCE __POSIX_VISIBLE=999999)
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wl,-q -O3 -g -ffast-math -mfloat-abi=softfp -Wno-deprecated")
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=gnu++20 -Wno-write-strings -Wno-psabi")
 
+# GCC 14+ turned several long-standing warnings into errors. This loader (and the
+# libraries it vendors) predates that, so keep them as warnings for C sources only.
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration -Wno-error=implicit-int -Wno-error=return-mismatch -Wno-error=declaration-missing-parameter-type")
+
 add_executable(${CMAKE_PROJECT_NAME}
                source/main.c
                source/dynlib.c
