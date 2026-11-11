@@ -10,7 +10,14 @@
 #include <string.h>
 #include "settings.h"
 
-#define CONFIG_FILE_PATH DATA_PATH"config.txt"
+#include "utils/utils.h"
+
+static const char *config_file_path(void) {
+    static char p[128];
+    snprintf(p, sizeof(p), "%sconfig.txt", data_path());
+    return p;
+}
+#define CONFIG_FILE_PATH config_file_path()
 
 bool setting_openWebBrowser;
 bool setting_patchControls;

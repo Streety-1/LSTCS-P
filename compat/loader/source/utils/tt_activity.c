@@ -18,7 +18,7 @@
 activity.name = (void*)so_symbol(&so_mod, "Java_com_tt_tech_TTActivity_" #name);                        \
 if (activity.name == NULL) {                                                                            \
     l_fatal("%s symbol could not found.", "Java_com_tt_tech_TTActivity_" #name);                          \
-    fatal_error("Error: could not find symbol %s in %s.", "Java_com_tt_tech_TTActivity_" #name, SO_PATH); \
+    fatal_error("Error: could not find symbol %s in %s.", "Java_com_tt_tech_TTActivity_" #name, "libTTapp.so"); \
 }
 
 extern TTActivity activity;

@@ -53,8 +53,10 @@ void soloader_init_all() {
     scePowerSetGpuClockFrequency(222);
     scePowerSetGpuXbarClockFrequency(166);
 
+    data_path_init();
+
 #ifdef USE_SCELIBC_IO
-    if (fios_init(DATA_PATH) == 0)
+    if (fios_init(data_path()) == 0)
         l_success("FIOS initialized.");
 #endif
 
@@ -106,10 +108,12 @@ void soloader_init_all() {
 
     // Checking for SO version. Prefer the copy the PC tool injected into the
     // VPK; fall back to the classic ux0:data location used by the original port.
+    static char so_data_path[128];
+    snprintf(so_data_path, sizeof(so_data_path), "%slibTTapp.so", data_path());
     const char *so_path = SO_PATH_APP;
     char *so_hash = file_sha1sum(so_path);
     if (!so_hash) {
-        so_path = SO_PATH;
+        so_path = so_data_path;
         so_hash = file_sha1sum(so_path);
     }
 
@@ -118,7 +122,7 @@ void soloader_init_all() {
         fatal_error("Looks like you haven't installed the data files for this "
                     "port, or they are in an incorrect location. Please make "
                     "sure you copied the ux0 folder made by LSTCS-P_Build.bat, so that "
-                    "%s exists.", SO_PATH);
+                    "data/lswtcs/libTTapp.so exists on ux0:, uma0: or grw0:.");
     }
 
     l_info("SO hash: %s", so_hash);

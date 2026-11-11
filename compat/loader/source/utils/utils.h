@@ -62,6 +62,11 @@ bool file_copy(const char * path, const char * destination);
  */
 bool file_exists(const char * path);
 
+/// Folder holding the game files, chosen at start-up: ux0:data/lswtcs/, or the same
+/// folder on uma0: / grw0: (e.g. an SD2Vita mounted there). Always ends with '/'.
+void data_path_init(void);
+const char * data_path(void);
+
 /**
  * Load file contents into memory.
  *

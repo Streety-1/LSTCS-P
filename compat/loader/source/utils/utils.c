@@ -526,3 +526,33 @@ char * str_xxhsum(const char * str, size_t size) {
 
     return strdup(hash);
 }
+
+// ---------------------------------------------------------------- data path --
+// Game files may live on ux0:, or on uma0:/grw0: when an SD2Vita is mounted there.
+// The first drive whose lswtcs folder has the game files wins; ux0: is the default.
+static char g_data_path[64] = DATA_PATH;
+
+void data_path_init(void) {
+    static const char * const drives[] = { "ux0:", "uma0:", "grw0:" };
+    const char *rel = strchr(DATA_PATH, ':') ? strchr(DATA_PATH, ':') + 1 : DATA_PATH;   // "data/lswtcs/"
+    char probe[128];
+
+    for (size_t i = 0; i < sizeof(drives) / sizeof(drives[0]); i++) {
+        snprintf(probe, sizeof(probe), "%s%sAudio.dat", drives[i], rel);
+        int found = file_exists(probe);
+        if (!found) {
+            snprintf(probe, sizeof(probe), "%s%slibTTapp.so", drives[i], rel);
+            found = file_exists(probe);
+        }
+        if (found) {
+            snprintf(g_data_path, sizeof(g_data_path), "%s%s", drives[i], rel);
+            l_info("Game files found in %s", g_data_path);
+            return;
+        }
+    }
+    l_warn("Game files not found on ux0:, uma0: or grw0:; using %s", g_data_path);
+}
+
+const char * data_path(void) {
+    return g_data_path;
+}

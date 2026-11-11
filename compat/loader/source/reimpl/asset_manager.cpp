@@ -1,5 +1,6 @@
 #include "reimpl/asset_manager.h"
 #include "utils/logger.h"
+#include "utils/utils.h"
 
 #include <pthread.h>
 #include <malloc.h>
@@ -36,7 +37,7 @@ AAssetManager * AAssetManager_create() {
 }
 
 AAsset* AAssetManager_open(AAssetManager* mgr, const char* filename, int mode) {
-    std::string realp = std::string(DATA_PATH) + std::string("assets/") + std::string(filename);
+    std::string realp = std::string(data_path()) + std::string("assets/") + std::string(filename);
 
     auto * a = new aAsset;
     a->filename = (char *) malloc(realp.length() + 1);

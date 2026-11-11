@@ -43,23 +43,22 @@ const char *fix_path(const char *filename) {
         return filename;
     }
 
-    if(strcmp(filename, ASSET_PACK_AUDIO_PATH) == 0) {
-        return DATA_PATH "Audio.dat";
-    }
-    if(strcmp(filename, ASSET_PACK_LEVELS_PATH) == 0) {
-        return DATA_PATH "Levels.dat";
-    }
-    if(strcmp(filename, ASSET_PACK_OTHERS_PATH) == 0) {
-        return DATA_PATH "Others.dat";
-    }
-    if(strcmp(filename, ASSET_PACK_TEXTURES_PATH) == 0) {
-        return DATA_PATH "Textures.dat";
+    static char dat_paths[4][96];
+    static const char * const dat_names[4] = { "Audio.dat", "Levels.dat", "Others.dat", "Textures.dat" };
+    static const char * const pack_paths[4] = { ASSET_PACK_AUDIO_PATH, ASSET_PACK_LEVELS_PATH,
+                                                ASSET_PACK_OTHERS_PATH, ASSET_PACK_TEXTURES_PATH };
+    for (int k = 0; k < 4; k++) {
+        if (strcmp(filename, pack_paths[k]) == 0) {
+            if (dat_paths[k][0] == '\0')
+                snprintf(dat_paths[k], sizeof(dat_paths[k]), "%s%s", data_path(), dat_names[k]);
+            return dat_paths[k];
+        }
     }
 
     file = strstr(filename, INTERNAL_PATH);
     if (file != NULL) {
         char *offset = buf + i * (sizeof(buf) / 2);
-        snprintf(offset, sizeof(buf) / 2, "%s%s", DATA_PATH, file + strlen(INTERNAL_PATH) + 1);
+        snprintf(offset, sizeof(buf) / 2, "%s%s", data_path(), file + strlen(INTERNAL_PATH) + 1);
         i = (i + 1) % 2;
         return offset;
     }
@@ -74,7 +73,7 @@ const char *fix_path(const char *filename) {
 
 static int is_dat_archive(const char *path) {
     size_t len = strlen(path);
-    return len > 4 && strcmp(path + len - 4, ".dat") == 0 && strncmp(path, DATA_PATH, strlen(DATA_PATH)) == 0;
+    return len > 4 && strcmp(path + len - 4, ".dat") == 0 && strncmp(path, data_path(), strlen(data_path())) == 0;
 }
 
 FILE * fopen_soloader(const char * filename, const char * mode) {
