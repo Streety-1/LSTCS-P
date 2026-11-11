@@ -99,6 +99,21 @@ void glBufferSubData_soloader(GLenum target, GLintptr offset, GLsizeiptr size, c
     glNamedBufferSubData(current_context->buffers[target - GL_ARRAY_BUFFER], offset, size, data);
 }
 
+/*
+ * Current vitaGL's direct-state texture functions (glTextureImage2D & co.) take only a
+ * texture id and handle plain 2D textures. The original port was built against a vitaGL
+ * that also took a target, so cube-map faces could be uploaded the same way. For cube
+ * maps we briefly bind the texture, use the classic call with the face target, and then
+ * restore the previous binding so the loader's own texture tracking is undisturbed.
+ */
+#define WITH_CUBE_MAP_BOUND(tex, call) do { \
+        GLint prev_cube_ = 0; \
+        glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &prev_cube_); \
+        glBindTexture(GL_TEXTURE_CUBE_MAP, (tex)); \
+        call; \
+        glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint) prev_cube_); \
+    } while (0)
+
 void glCompressedTexImage2D_soloader(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height,
                                      GLint border, GLsizei imageSize, const void *data) {
 #ifndef SKIP_ERROR_HANDLING
@@ -113,8 +128,12 @@ void glCompressedTexImage2D_soloader(GLenum target, GLint level, GLenum internal
 #endif
 
     const size_t i = target == GL_TEXTURE_2D ? 0 : 1;
-    glCompressedTextureImage2D(current_context->textures[current_context->texture * 2 + i], target, level,
-                               internalformat, width, height, border, imageSize, data);
+    const GLuint tex = current_context->textures[current_context->texture * 2 + i];
+    if (i == 0)
+        glCompressedTextureImage2D(tex, level, internalformat, width, height, border, imageSize, data);
+    else
+        WITH_CUBE_MAP_BOUND(tex, glCompressedTexImage2D(target, level, internalformat, width, height, border,
+                                                        imageSize, data));
 }
 
 void glCopyTexImage2D_soloader(GLenum target, GLint level, GLenum internalformat, GLint x, GLint y, GLsizei width,
@@ -252,8 +271,12 @@ void glTexImage2D_soloader(GLenum target, GLint level, GLint internalformat, GLs
 #endif
 
     const size_t i = target == GL_TEXTURE_2D ? 0 : 1;
-    glTextureImage2D(current_context->textures[current_context->texture * 2 + i], target, level, internalformat,
-                     width, height, border, format, type, pixels);
+    const GLuint tex = current_context->textures[current_context->texture * 2 + i];
+    if (i == 0)
+        glTextureImage2D(tex, level, internalformat, width, height, border, format, type, pixels);
+    else
+        WITH_CUBE_MAP_BOUND(tex, glTexImage2D(target, level, internalformat, width, height, border, format, type,
+                                              pixels));
 }
 
 void glTexParameteri_soloader(GLenum target, GLenum pname, GLint param) {
@@ -268,7 +291,11 @@ void glTexParameteri_soloader(GLenum target, GLenum pname, GLint param) {
 #endif
 
     const size_t i = target == GL_TEXTURE_2D ? 0 : 1;
-    glTextureParameteri(current_context->textures[current_context->texture * 2 + i], target, pname, param);
+    const GLuint tex = current_context->textures[current_context->texture * 2 + i];
+    if (i == 0)
+        glTextureParameteri(tex, pname, param);
+    else
+        WITH_CUBE_MAP_BOUND(tex, glTexParameteri(GL_TEXTURE_CUBE_MAP, pname, param));
 }
 
 void glUniform1fv_soloader(GLint location, GLsizei count, const GLfloat *value) {
