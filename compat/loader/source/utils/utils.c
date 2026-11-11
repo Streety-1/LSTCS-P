@@ -547,12 +547,51 @@ void data_path_init(void) {
         if (found) {
             snprintf(g_data_path, sizeof(g_data_path), "%s%s", drives[i], rel);
             l_info("Game files found in %s", g_data_path);
+            lstcs_log("Game files found in %s", g_data_path);
             return;
         }
     }
     l_warn("Game files not found on ux0:, uma0: or grw0:; using %s", g_data_path);
+    lstcs_log("Game files NOT found on ux0:, uma0: or grw0:; using %s", g_data_path);
 }
 
 const char * data_path(void) {
     return g_data_path;
 }
+
+// ------------------------------------------------------------------ log file --
+#include <stdarg.h>
+#include <psp2/io/fcntl.h>
+#include <psp2/kernel/threadmgr.h>
+
+static SceKernelLwMutexWork g_log_mutex;
+static int g_log_ready = 0;
+
+void lstcs_log(const char * fmt, ...) {
+    static int started = 0;
+    if (!g_log_ready) {
+        if (sceKernelCreateLwMutex(&g_log_mutex, "lstcs_log", 0, 0, NULL) < 0) return;
+        g_log_ready = 1;
+    }
+    char line[512];
+    va_list args;
+    va_start(args, fmt);
+    int n = vsnprintf(line, sizeof(line) - 2, fmt, args);
+    va_end(args);
+    if (n < 0) return;
+    if (n > (int) sizeof(line) - 2) n = sizeof(line) - 2;
+    line[n++] = '\n';
+
+    char path[128];
+    snprintf(path, sizeof(path), "%slstcs-log.txt", data_path());
+    sceKernelLockLwMutex(&g_log_mutex, 1, NULL);
+    int flags = SCE_O_WRONLY | SCE_O_CREAT | (started ? SCE_O_APPEND : SCE_O_TRUNC);
+    SceUID fd = sceIoOpen(path, flags, 0666);
+    if (fd >= 0) {
+        sceIoWrite(fd, line, n);
+        sceIoClose(fd);
+        started = 1;
+    }
+    sceKernelUnlockLwMutex(&g_log_mutex, 1);
+}
+

@@ -49,7 +49,59 @@ enum {
  * filled up every lock call created a brand-new mutex - both lead to lost locking,
  * leaks and intermittent crashes. It also scanned the table on every lock.)
  */
-#define PTHR_IS_REAL_PTR(v) ((uintptr_t) (v) >= 0x10000)
+#define PTHR_IS_SMALL_VALUE(v) ((uintptr_t) (v) < 0x10000)
+
+/*
+ * Registry of the real mutex/cond objects this loader created. A bionic slot only
+ * counts as initialised if it holds one of these pointers; anything else (zero, an
+ * initializer constant, or leftover garbage in uninitialised memory) is treated as
+ * "not created yet". Lock-free open addressing: inserts CAS an empty slot, removals
+ * leave a tombstone, lookups never block.
+ */
+#define PTHR_REG_SIZE 32768u   /* power of two */
+#define PTHR_REG_EMPTY 0u
+#define PTHR_REG_TOMB 1u
+static uintptr_t pthr_registry[PTHR_REG_SIZE];
+
+static inline uint32_t pthr_hash(uintptr_t p) {
+    return (uint32_t) ((p >> 3) * 2654435761u) & (PTHR_REG_SIZE - 1);
+}
+
+static void pthr_reg_add(uintptr_t p) {
+    uint32_t i = pthr_hash(p);
+    for (uint32_t n = 0; n < PTHR_REG_SIZE; n++, i = (i + 1) & (PTHR_REG_SIZE - 1)) {
+        uintptr_t cur = __atomic_load_n(&pthr_registry[i], __ATOMIC_ACQUIRE);
+        if (cur == p) return;
+        if (cur == PTHR_REG_EMPTY || cur == PTHR_REG_TOMB) {
+            if (__atomic_compare_exchange_n(&pthr_registry[i], &cur, p, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+                return;
+            if (cur == p) return;
+        }
+    }
+    l_error("pthread registry full");
+}
+
+static int pthr_reg_has(uintptr_t p) {
+    if (PTHR_IS_SMALL_VALUE(p)) return 0;
+    uint32_t i = pthr_hash(p);
+    for (uint32_t n = 0; n < PTHR_REG_SIZE; n++, i = (i + 1) & (PTHR_REG_SIZE - 1)) {
+        uintptr_t cur = __atomic_load_n(&pthr_registry[i], __ATOMIC_ACQUIRE);
+        if (cur == p) return 1;
+        if (cur == PTHR_REG_EMPTY) return 0;
+    }
+    return 0;
+}
+
+static void pthr_reg_remove(uintptr_t p) {
+    uint32_t i = pthr_hash(p);
+    for (uint32_t n = 0; n < PTHR_REG_SIZE; n++, i = (i + 1) & (PTHR_REG_SIZE - 1)) {
+        uintptr_t cur = __atomic_load_n(&pthr_registry[i], __ATOMIC_ACQUIRE);
+        if (cur == p) { __atomic_store_n(&pthr_registry[i], PTHR_REG_TOMB, __ATOMIC_RELEASE); return; }
+        if (cur == PTHR_REG_EMPTY) return;
+    }
+}
+
+#define PTHR_IS_REAL_PTR(v) pthr_reg_has((uintptr_t) (v))
 
 static pthread_mutex_t *_mutex_create(int kind) {
     pthread_mutex_t *m = malloc(sizeof(pthread_mutex_t));
@@ -65,6 +117,7 @@ static pthread_mutex_t *_mutex_create(int kind) {
         free(m);
         return NULL;
     }
+    pthr_reg_add((uintptr_t) m);
     return m;
 }
 
@@ -79,12 +132,12 @@ PTHR_INLINE int _attr_t_static_init(pthread_attr_t_bionic * attr) {
 }
 
 // Lazily creates the real mutex for a statically-initialised bionic mutex. Thread-safe.
-PTHR_INLINE pthread_mutex_t *_mutex_get(pthread_mutex_t_bionic * mutex) {
+static pthread_mutex_t *_mutex_get(pthread_mutex_t_bionic * mutex) {
     uintptr_t cur = __atomic_load_n((uintptr_t *) &mutex->real_ptr, __ATOMIC_ACQUIRE);
     if (PTHR_IS_REAL_PTR(cur))
         return (pthread_mutex_t *) cur;
 
-    int kind = PTHREAD_MUTEX_NORMAL;
+    int kind = PTHREAD_MUTEX_NORMAL;   // also used for uninitialised garbage
     if (cur == BIONIC_PTHREAD_RECURSIVE_MUTEX_INITIALIZER) kind = PTHREAD_MUTEX_RECURSIVE;
     else if (cur == BIONIC_PTHREAD_ERRORCHECK_MUTEX_INITIALIZER) kind = PTHREAD_MUTEX_ERRORCHECK;
 
@@ -101,13 +154,14 @@ PTHR_INLINE pthread_mutex_t *_mutex_get(pthread_mutex_t_bionic * mutex) {
     }
 
     // Another thread won the race: use its mutex, discard ours.
+    pthr_reg_remove((uintptr_t) m);
     pthread_mutex_destroy(m);
     free(m);
-    return (pthread_mutex_t *) expected;
+    return PTHR_IS_REAL_PTR(expected) ? (pthread_mutex_t *) expected : _mutex_get(mutex);
 }
 
 // Lazily creates the real cond for a statically-initialised bionic cond. Thread-safe.
-PTHR_INLINE pthread_cond_t *_cond_get(pthread_cond_t_bionic * cond) {
+static pthread_cond_t *_cond_get(pthread_cond_t_bionic * cond) {
     uintptr_t cur = __atomic_load_n((uintptr_t *) &cond->real_ptr, __ATOMIC_ACQUIRE);
     if (PTHR_IS_REAL_PTR(cur))
         return (pthread_cond_t *) cur;
@@ -118,6 +172,7 @@ PTHR_INLINE pthread_cond_t *_cond_get(pthread_cond_t_bionic * cond) {
         l_error("cond creation for %p has failed", cond);
         return NULL;
     }
+    pthr_reg_add((uintptr_t) c);
 
     uintptr_t expected = cur;
     if (__atomic_compare_exchange_n((uintptr_t *) &cond->real_ptr, &expected, (uintptr_t) c,
@@ -125,9 +180,10 @@ PTHR_INLINE pthread_cond_t *_cond_get(pthread_cond_t_bionic * cond) {
         return c;
     }
 
+    pthr_reg_remove((uintptr_t) c);
     pthread_cond_destroy(c);
     free(c);
-    return (pthread_cond_t *) expected;
+    return PTHR_IS_REAL_PTR(expected) ? (pthread_cond_t *) expected : _cond_get(cond);
 }
 
 int pthread_create_soloader(pthread_t *thread, const pthread_attr_t_bionic *attr, void *(*start)(void *), void *param) {
@@ -190,6 +246,7 @@ int pthread_mutex_destroy_soloader(pthread_mutex_t_bionic *mutex)
     if (!mutex) return 0;
     uintptr_t cur = __atomic_exchange_n((uintptr_t *) &mutex->real_ptr, 0, __ATOMIC_ACQ_REL);
     if (!PTHR_IS_REAL_PTR(cur)) return 0;
+    pthr_reg_remove(cur);
     int ret = pthread_mutex_destroy((pthread_mutex_t *) cur);
     free((void *) cur);
     return ret;
@@ -249,6 +306,7 @@ int pthread_cond_init_soloader(pthread_cond_t_bionic *cond,
         l_error("cond initialization for %p has failed", cond);
         return ret;
     }
+    pthr_reg_add((uintptr_t) c);
     __atomic_store_n((uintptr_t *) &cond->real_ptr, (uintptr_t) c, __ATOMIC_RELEASE);
     return 0;
 }
@@ -258,6 +316,7 @@ int pthread_cond_destroy_soloader(pthread_cond_t_bionic *cond)
     if (!cond) return 0;
     uintptr_t cur = __atomic_exchange_n((uintptr_t *) &cond->real_ptr, 0, __ATOMIC_ACQ_REL);
     if (!PTHR_IS_REAL_PTR(cur)) return 0;
+    pthr_reg_remove(cur);
     int ret = pthread_cond_destroy((pthread_cond_t *) cur);
     free((void *) cur);
     return ret;

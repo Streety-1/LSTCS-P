@@ -146,6 +146,7 @@ void soloader_init_all() {
     free(so_hash);
 
     l_success("SO check passed.");
+    lstcs_log("Game library OK (v2.0.2.02) from %s", so_path);
 
     l_info("Loading SO from %s", so_path);
     if (so_file_load(&so_mod, so_path, LOAD_ADDRESS) < 0) {
@@ -170,6 +171,7 @@ void soloader_init_all() {
 
     so_initialize(&so_mod);
     l_success("SO initialized.");
+    lstcs_log("Loader ready, starting the game");
 
     tt_activity_init();
     l_success("TTActivity initialized.");

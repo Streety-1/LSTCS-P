@@ -25,6 +25,24 @@ _Thread_local _egl_context* current_context = NULL;
 // Helpers for our handling of shaders
 _Thread_local GLboolean skip_next_compile = GL_FALSE;
 _Thread_local char next_shader_fname[256];
+_Thread_local char current_shader_name[40];
+
+/*
+ * Placeholder shaders (valid Cg), used when a real shader is missing or fails to
+ * compile. The vertex one collapses geometry to a point so the object just doesn't
+ * appear; the fragment one draws plain white. Either way the game keeps running:
+ * a shader with no compiled program makes glLinkProgram crash inside SceGxm.
+ */
+static const char * const PLACEHOLDER_VS = "float4 main() : POSITION { return float4(0.0, 0.0, 0.0, 1.0); }";
+static const char * const PLACEHOLDER_FS = "float4 main() : COLOR { return float4(1.0, 1.0, 1.0, 1.0); }";
+
+static void set_placeholder_source(GLuint shader) {
+    GLint type = 0;
+    glGetShaderiv(shader, GL_SHADER_TYPE, &type);
+    const char *src = type == GL_FRAGMENT_SHADER ? PLACEHOLDER_FS : PLACEHOLDER_VS;
+    GLint len = (GLint) strlen(src);
+    glShaderSource(shader, 1, &src, &len);
+}
 
 GLint uniforms[GLUTIL_MAX_PROGRAMS * GLUTIL_MAX_UNIFORMS];
 
@@ -38,12 +56,27 @@ void glCompileShader_soloader(GLuint shader) {
 #ifndef USE_GXP_SHADERS
     if (!skip_next_compile) {
         glCompileShader(shader);
-#ifdef DUMP_COMPILED_SHADERS
-        // Cache the compiled shader, but only when it compiled and we know which
-        // real shader it is. (Previously placeholder shaders and failed compiles were
-        // saved too, under the previous shader's name, corrupting the cache.)
+
         GLint compiled = GL_FALSE;
         glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+        if (compiled != GL_TRUE) {
+            lstcs_log("Shader %s (id %u) failed to compile; using a placeholder", current_shader_name, shader);
+            l_error("Shader %s failed to compile; using a placeholder", current_shader_name);
+            set_placeholder_source(shader);
+            glCompileShader(shader);
+            glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+            if (compiled != GL_TRUE) {
+                lstcs_log("  placeholder for %s ALSO failed: the shader compiler isn't working", current_shader_name);
+                fatal_error("The Vita's shader compiler (libshacccg.suprx) failed to work. "
+                            "Reinstall it with ShaRKBR33D, then reboot and try again.");
+            }
+#ifdef DUMP_COMPILED_SHADERS
+            next_shader_fname[0] = '\0';
+#endif
+        }
+#ifdef DUMP_COMPILED_SHADERS
+        // Cache the compiled shader, but only when it compiled and we know which
+        // real shader it is.
         if (compiled == GL_TRUE && next_shader_fname[0] != '\0') {
             void *bin = vglMalloc(32 * 1024);
             GLsizei len = 0;
@@ -66,12 +99,18 @@ void glShaderSource_soloader(GLuint handle, GLsizei count, const GLchar *const *
     if (!string) {
         l_error("<%p> Shader source string is NULL, count: %i",
                    __builtin_return_address(0), count);
-        skip_next_compile = GL_TRUE;
+        lstcs_log("Shader %u given no source; using a placeholder", handle);
+        snprintf(current_shader_name, sizeof(current_shader_name), "(no source)");
+        set_placeholder_source(handle);
+        skip_next_compile = GL_FALSE;
         return;
     } else if (!*string) {
         l_error("<%p> Shader source *string is NULL, count: %i",
                    __builtin_return_address(0), count);
-        skip_next_compile = GL_TRUE;
+        lstcs_log("Shader %u given no source; using a placeholder", handle);
+        snprintf(current_shader_name, sizeof(current_shader_name), "(no source)");
+        set_placeholder_source(handle);
+        skip_next_compile = GL_FALSE;
         return;
     }
 
@@ -105,6 +144,9 @@ void glShaderSource_soloader(GLuint handle, GLsizei count, const GLchar *const *
 }
 
 void gl_preload() {
+    lstcs_log("libshacccg.suprx: ur0:data=%s ur0:data/external=%s",
+              file_exists("ur0:/data/libshacccg.suprx") ? "yes" : "no",
+              file_exists("ur0:/data/external/libshacccg.suprx") ? "yes" : "no");
     if (!file_exists("ur0:/data/libshacccg.suprx")
         && !file_exists("ur0:/data/external/libshacccg.suprx")) {
         fatal_error("Error: libshacccg.suprx is not installed. "
@@ -121,6 +163,7 @@ void gl_preload() {
 #if defined(USE_GLSL_SHADERS) && defined(DUMP_COMPILED_SHADERS)
 void load_shader(GLuint shader, const char * string, size_t length) {
     char* xxh_name = str_xxhsum(string, length);
+    snprintf(current_shader_name, sizeof(current_shader_name), "%s", xxh_name);
 
     char gxp_path[256];
     snprintf(gxp_path, sizeof(gxp_path), "%sgxp/%c/%s.gxp", data_path(), xxh_name[0], xxh_name);
@@ -149,6 +192,7 @@ void load_shader(GLuint shader, const char * string, size_t length) {
 #elif defined(USE_CG_SHADERS) && defined(DUMP_COMPILED_SHADERS)
 void load_shader(GLuint shader, const char * string, size_t length) {
     char* xxh_name = str_xxhsum(string, length);
+    snprintf(current_shader_name, sizeof(current_shader_name), "%s", xxh_name);
 
     char gxp_path[256];
     char cg_path[256];
@@ -188,15 +232,8 @@ void load_shader(GLuint shader, const char * string, size_t length) {
         file_mkpath(glsl_path, 0777);
         file_save(glsl_path, (const uint8_t *) string, length);
 
-        if (strstr(string, "gl_FragColor")) {
-            const char *dummy_shader = "float4 main() { return float4(1.0,1.0,1.0,1.0); }";
-            int32_t dummy_shader_len = (int32_t) strlen(dummy_shader);
-            glShaderSource(shader, 1, &dummy_shader, &dummy_shader_len);
-        } else {
-            const char *dummy_shader = "void main(float4 out gl_Position : POSITION ) { gl_Position = float4(1.0,1.0,1.0,1.0); }";
-            int32_t dummy_shader_len = (int32_t) strlen(dummy_shader);
-            glShaderSource(shader, 1, &dummy_shader, &dummy_shader_len);
-        }
+        lstcs_log("Shader %s has no translation in cg/ ; using a placeholder (GLSL saved to glsl/)", xxh_name);
+        set_placeholder_source(shader);
 
         skip_next_compile = GL_FALSE;
     }
@@ -206,6 +243,7 @@ void load_shader(GLuint shader, const char * string, size_t length) {
 #elif defined(USE_CG_SHADERS) || defined(USE_GXP_SHADERS)
 void load_shader(GLuint shader, const char * string, size_t length) {
     char* xxh_name = str_xxhsum(string, length);
+    snprintf(current_shader_name, sizeof(current_shader_name), "%s", xxh_name);
 
     char path[256];
 #ifdef USE_CG_SHADERS
@@ -246,15 +284,8 @@ void load_shader(GLuint shader, const char * string, size_t length) {
         file_mkpath(glsl_path, 0777);
         file_save(glsl_path, (const uint8_t *) string, length);
 
-        if (strstr(string, "gl_FragColor")) {
-            const char *dummy_shader = "void main(float4 out gl_FragColor : COLOR) { gl_FragColor = float4(1.0,1.0,1.0,1.0); }";
-            int32_t dummy_shader_len = (int32_t) strlen(dummy_shader);
-            glShaderSource(shader, 1, &dummy_shader, &dummy_shader_len);
-        } else {
-            const char *dummy_shader = "void main(float4 out gl_Position : POSITION ) { gl_Position = float4(1.0,1.0,1.0,1.0); }";
-            int32_t dummy_shader_len = (int32_t) strlen(dummy_shader);
-            glShaderSource(shader, 1, &dummy_shader, &dummy_shader_len);
-        }
+        lstcs_log("Shader %s has no translation in cg/ ; using a placeholder (GLSL saved to glsl/)", xxh_name);
+        set_placeholder_source(shader);
     }
 
     free(xxh_name);

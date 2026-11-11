@@ -67,6 +67,10 @@ bool file_exists(const char * path);
 void data_path_init(void);
 const char * data_path(void);
 
+/// Appends one line to <data path>/lstcs-log.txt (recreated at every launch), so
+/// problems can be diagnosed from a text file instead of crash dumps.
+void lstcs_log(const char * fmt, ...);
+
 /**
  * Load file contents into memory.
  *
