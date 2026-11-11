@@ -125,10 +125,15 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
                       stdc++
                       OpenSLES
                       sndfile
-                      vorbis
+                      # libsndfile in current VitaSDK also pulls in MP3 (mpg123/LAME) and Opus;
+                      # dependencies must come after the libraries that use them.
                       vorbisenc
-                      ogg
+                      vorbis
                       FLAC
+                      opus
+                      mpg123
+                      mp3lame
+                      ogg
                       vitaGL
                       vitashark
                       SceShaccCgExt
