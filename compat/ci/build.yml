@@ -55,6 +55,13 @@ jobs:
             build/LSTCS-P.vpk
             LSTCS-P.zip
 
+      # Unstripped program with debug names, needed to read Vita crash dumps
+      # (psp2core-*.psp2dmp). Kept as a build artifact only, not on the release.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LSTCS-P-debug-elf
+          path: build/so_loader
+
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
