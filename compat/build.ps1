@@ -241,8 +241,7 @@ try {
             $missing += $target
         }
     }
-    # Shaders: shipped as .cg, compiled on the Vita the first time each is used and
-    # cached as .gxp in the same folder (expect brief hitches only on the first play).
+    # Shaders: shipped as .cg and compiled on the Vita when the game first needs each one.
     $shaderZip = Join-Path $Compat 'shaders.zip'
     if (Test-Path -LiteralPath $shaderZip) {
         $zip = [System.IO.Compression.ZipFile]::OpenRead($shaderZip)
