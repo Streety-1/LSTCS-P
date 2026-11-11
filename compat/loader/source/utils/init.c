@@ -117,8 +117,8 @@ void soloader_init_all() {
         l_fatal("SO could not be located.");
         fatal_error("Looks like you haven't installed the data files for this "
                     "port, or they are in an incorrect location. Please make "
-                    "sure that you built the VPK with the PC tool, or have %s "
-                    "file exactly at that path.", SO_PATH);
+                    "sure you copied the ux0 folder made by LSTCS-P_Build.bat, so that "
+                    "%s exists.", SO_PATH);
     }
 
     l_info("SO hash: %s", so_hash);

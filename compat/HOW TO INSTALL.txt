@@ -15,11 +15,11 @@ ONE-TIME SETUP (skip anything you already have)
 
 INSTALLING THE GAME
   1. Connect the Vita to your PC with VitaShell (USB or FTP).
-  2. Copy the "ux0" folder from here onto the Vita's ux0: drive.
-     The four .dat files must end up in  ux0:data/lswtcs/
-  3. Copy "LEGO Star Wars - The Complete Saga Portable.vpk" anywhere on ux0:, select it in
-     VitaShell and press X to install.
+  2. Copy the "ux0" folder from "Ready For Vita" onto the Vita's ux0: drive.
+     Everything must end up in  ux0:data/lswtcs/
+  3. Download LSTCS-P.vpk from the GitHub release page, copy it anywhere on
+     ux0:, select it in VitaShell and press X to install.
   4. Launch "LEGO Star Wars: The Complete Saga Portable" from the home screen.
 
 If the game says files are missing, check that ux0:data/lswtcs/ contains
-Audio.dat, Levels.dat, Others.dat and Textures.dat.
+libTTapp.so, Audio.dat, Levels.dat, Others.dat and Textures.dat.

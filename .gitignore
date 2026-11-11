@@ -7,7 +7,6 @@
 *.dat
 Ready For Vita/
 compat/.work/
-compat/base/*.vpk
 
 # Build output
 build/

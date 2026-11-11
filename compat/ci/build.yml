@@ -4,7 +4,7 @@ name: Build
 # files: players add their own copy with "LSTCS-P_Build.bat". Pushing a tag like v1.0.0
 # publishes a release with two downloads:
 #   LSTCS-P.vpk  the compiled port on its own
-#   LSTCS-P.zip  everything a player needs: the builder, its files and the VPK
+#   LSTCS-P.zip  the PC builder that prepares the game files for the Vita
 
 on:
   push:
@@ -42,11 +42,10 @@ jobs:
       - name: Package LSTCS-P.zip
         run: |
           D=dist/LSTCS-P
-          mkdir -p "$D/compat/base"
+          mkdir -p "$D/compat"
           cp LSTCS-P_Build.bat LICENSE "$D/"
           cp "compat/HOW TO INSTALL.txt" "$D/"
           cp compat/build.ps1 compat/shaders.zip compat/config.txt "compat/HOW TO INSTALL.txt" "$D/compat/"
-          cp build/LSTCS-P.vpk "$D/compat/base/"
           (cd dist && zip -r -9 ../LSTCS-P.zip LSTCS-P)
 
       - uses: actions/upload-artifact@v4

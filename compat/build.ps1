@@ -1,10 +1,11 @@
 <#
     LEGO Star Wars: The Complete Saga Portable (LSTCS-P) - builder
     ==================================================================
-    Turns your own copy of the Android game into everything the Vita needs:
+    Turns your own copy of the Android game into the files the Vita needs:
 
-      Ready For Vita\LEGO Star Wars - The Complete Saga Portable.vpk   install with VitaShell
-      Ready For Vita\ux0\data\lswtcs\...          copy onto the Vita's ux0:
+      Ready For Vita\ux0\data\lswtcs\...   copy onto the Vita's ux0:
+
+    The app itself is LSTCS-P.vpk from the GitHub release - install it with VitaShell.
 
     Run it through "LSTCS-P_Build.bat" in the folder above this one;
     it asks you to pick your game files in a normal Windows file window.
@@ -19,9 +20,6 @@ Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # ---------------------------------------------------------------- settings --
-$GitHubRepo   = 'Streety-1/LSTCS-P'   # where the base VPK is published
-$BaseVpkName  = 'LSTCS-P.vpk'
-$OutVpkName   = 'LEGO Star Wars - The Complete Saga Portable.vpk'
 $OutFolder    = 'Ready For Vita'
 $VitaDataDir  = 'ux0\data\lswtcs'
 $SoEntry      = 'lib/armeabi-v7a/libTTapp.so'
@@ -212,45 +210,18 @@ try {
     }
     Ok 'Game library found and verified (v2.0.2.02)'
 
-    # 3. Base VPK (the compiled port) --------------------------------------------
-    Step 'Preparing the Vita app'
-    $baseVpk = Join-Path $Compat ('base\' + $BaseVpkName)
-    if (-not (Test-Path -LiteralPath $baseVpk)) {
-        Say "   No compiled port in compat\base yet - trying the latest release on GitHub..."
-        try {
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            $release = Invoke-RestMethod -UseBasicParsing -Uri "https://api.github.com/repos/$GitHubRepo/releases/latest" -Headers @{ 'User-Agent' = 'LSTCS-P-builder' }
-            $asset = $release.assets | Where-Object { $_.name -eq $BaseVpkName } | Select-Object -First 1
-            if (-not $asset) { throw 'no asset' }
-            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $baseVpk) | Out-Null
-            Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile $baseVpk
-            Ok "Downloaded $($release.tag_name)"
-        } catch {
-            Fail ("Couldn't find the compiled port ($BaseVpkName).`n" +
-                  "         Download it from https://github.com/$GitHubRepo/releases and put it in compat\base,`n" +
-                  "         or check your internet connection and run this again.")
-        }
-    }
-
+    # 3. Output folder ------------------------------------------------------------
+    # The app itself is LSTCS-P.vpk from the GitHub release; this only prepares the
+    # files it needs on the memory card. The port loads the game code from
+    # ux0:data/lswtcs/libTTapp.so.
+    Step 'Preparing the files for your Vita'
     if (Test-Path -LiteralPath $Out) {
         Say "   Clearing the old '$OutFolder' folder"
         Remove-Item -LiteralPath $Out -Recurse -Force
     }
     New-Item -ItemType Directory -Force -Path $OutData | Out-Null
-
-    # The VPK is just a zip: copy the compiled port and add the game library to it,
-    # so the Vita installs the app and the game code together.
-    $vpk = Join-Path $Out $OutVpkName
-    Copy-Item -LiteralPath $baseVpk -Destination $vpk
-    $zip = [System.IO.Compression.ZipFile]::Open($vpk, [System.IO.Compression.ZipArchiveMode]::Update)
-    try {
-        $old = $zip.GetEntry('lib/libTTapp.so'); if ($old) { $old.Delete() }
-        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $state.So, 'lib/libTTapp.so',
-            [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
-    } finally {
-        $zip.Dispose()
-    }
-    Ok "Built $OutVpkName"
+    Copy-Item -LiteralPath $state.So -Destination (Join-Path $OutData 'libTTapp.so')
+    Ok 'Game code (libTTapp.so)'
 
     # 4. Game data ---------------------------------------------------------------
     Step 'Copying the game data'
