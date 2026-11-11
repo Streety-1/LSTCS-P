@@ -1,0 +1,25 @@
+LEGO Star Wars: The Complete Saga Portable - installing on your PS Vita
+==================================================
+
+You need a homebrew-enabled Vita (HENkaku/Enso) with VitaShell.
+
+ONE-TIME SETUP (skip anything you already have)
+  1. kubridge v0.3.1 or newer: put kubridge.skprx in ur0:tai and add this line
+     under *KERNEL in ur0:tai/config.txt:
+         ur0:tai/kubridge.skprx
+  2. fd_fix: put fd_fix.skprx in ur0:tai and add under *KERNEL:
+         ur0:tai/fd_fix.skprx
+     (Skip fd_fix if you use the rePatch plugin.)
+  3. libshacccg.suprx in ur0:data - use ShaRKBR33D to get it in one step.
+  4. Reboot the Vita.
+
+INSTALLING THE GAME
+  1. Connect the Vita to your PC with VitaShell (USB or FTP).
+  2. Copy the "ux0" folder from here onto the Vita's ux0: drive.
+     The four .dat files must end up in  ux0:data/lswtcs/
+  3. Copy "LEGO Star Wars - The Complete Saga Portable.vpk" anywhere on ux0:, select it in
+     VitaShell and press X to install.
+  4. Launch "LEGO Star Wars: The Complete Saga Portable" from the home screen.
+
+If the game says files are missing, check that ux0:data/lswtcs/ contains
+Audio.dat, Levels.dat, Others.dat and Textures.dat.

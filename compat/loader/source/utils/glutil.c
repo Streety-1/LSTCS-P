@@ -1,0 +1,264 @@
+/*
+ * Copyright (C) 2021      Andy Nguyen
+ * Copyright (C) 2021      Rinnegatamante
+ * Copyright (C) 2022-2023 Volodymyr Atamanenko
+ * Copyright (C) 2024      Jan Smialkowski
+ *
+ * This software may be modified and distributed under the terms
+ * of the MIT license. See the LICENSE file for details.
+ */
+
+#include "utils/glutil.h"
+
+#include <reimpl/gl.h>
+
+#include "utils/utils.h"
+#include "utils/dialog.h"
+#include "utils/logger.h"
+
+#include <stdio.h>
+#include <malloc.h>
+#include <string.h>
+
+_Thread_local _egl_context* current_context = NULL;
+
+// Helpers for our handling of shaders
+_Thread_local GLboolean skip_next_compile = GL_FALSE;
+_Thread_local char next_shader_fname[256];
+
+GLint uniforms[GLUTIL_MAX_PROGRAMS * GLUTIL_MAX_UNIFORMS];
+
+void load_shader(GLuint shader, const char * string, size_t length);
+
+void glCompileShader_soloader(GLuint shader) {
+#ifdef DEBUG_OPENGL
+    sceClibPrintf("[gl_dbg] glCompileShader<%p>(shader: %i)\n", __builtin_return_address(0), shader);
+#endif
+
+#ifndef USE_GXP_SHADERS
+    if (!skip_next_compile) {
+        glCompileShader(shader);
+#ifdef DUMP_COMPILED_SHADERS
+        // Cache the compiled shader, but only when it compiled and we know which
+        // real shader it is. (Previously placeholder shaders and failed compiles were
+        // saved too, under the previous shader's name, corrupting the cache.)
+        GLint compiled = GL_FALSE;
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+        if (compiled == GL_TRUE && next_shader_fname[0] != '\0') {
+            void *bin = vglMalloc(32 * 1024);
+            GLsizei len = 0;
+            vglGetShaderBinary(shader, 32 * 1024, &len, bin);
+            if (len > 0 && file_mkpath(next_shader_fname, 0777))
+                file_save(next_shader_fname, bin, len);
+            vglFree(bin);
+        }
+        next_shader_fname[0] = '\0';
+#endif
+    }
+    skip_next_compile = GL_FALSE;
+#endif
+}
+
+void glShaderSource_soloader(GLuint handle, GLsizei count, const GLchar *const *string, const GLint *length) {
+#ifdef DEBUG_OPENGL
+    sceClibPrintf("[gl_dbg] glShaderSource<%p>(shader: %i, count: %i, string: %p, length: %p)\n", __builtin_return_address(0), handle, count, string, length);
+#endif
+    if (!string) {
+        l_error("<%p> Shader source string is NULL, count: %i",
+                   __builtin_return_address(0), count);
+        skip_next_compile = GL_TRUE;
+        return;
+    } else if (!*string) {
+        l_error("<%p> Shader source *string is NULL, count: %i",
+                   __builtin_return_address(0), count);
+        skip_next_compile = GL_TRUE;
+        return;
+    }
+
+    size_t total_length = 0;
+
+    for (int i = 0; i < count; ++i) {
+        if (!length) {
+            total_length += strlen(string[i]);
+        } else {
+            total_length += length[i];
+        }
+    }
+
+    char * str = malloc(total_length+1);
+    size_t l = 0;
+
+    for (int i = 0; i < count; ++i) {
+        if (!length) {
+            memcpy(str + l, string[i], strlen(string[i]));
+            l += strlen(string[i]);
+        } else {
+            memcpy(str + l, string[i], length[i]);
+            l += length[i];
+        }
+    }
+    str[total_length] = '\0';
+
+    load_shader(handle, str, total_length);
+
+    free(str);
+}
+
+void gl_preload() {
+    if (!file_exists("ur0:/data/libshacccg.suprx")
+        && !file_exists("ur0:/data/external/libshacccg.suprx")) {
+        fatal_error("Error: libshacccg.suprx is not installed. "
+                    "Google \"ShaRKBR33D\" for quick installation.");
+        }
+
+    memset(uniforms, -1, sizeof(uniforms));
+
+#ifdef USE_GLSL_SHADERS
+    vglSetSemanticBindingMode(VGL_MODE_POSTPONED);
+#endif
+}
+
+#if defined(USE_GLSL_SHADERS) && defined(DUMP_COMPILED_SHADERS)
+void load_shader(GLuint shader, const char * string, size_t length) {
+    char* xxh_name = str_xxhsum(string, length);
+
+    char gxp_path[256];
+    snprintf(gxp_path, sizeof(gxp_path), DATA_PATH"gxp/%c/%s.gxp", xxh_name[0], xxh_name);
+
+    if (file_exists(gxp_path)) {
+        uint8_t *buffer;
+        size_t size;
+
+        file_load(gxp_path, &buffer, &size);
+
+        glShaderBinary(1, &shader, 0, buffer, (int32_t) size);
+
+        free(buffer);
+        skip_next_compile = GL_TRUE;
+    } else {
+        glShaderSource(shader, 1, &string, &length);
+        strcpy(next_shader_fname, gxp_path);
+    }
+
+    free(xxh_name);
+}
+#elif defined(USE_GLSL_SHADERS)
+void load_shader(GLuint shader, const char * string, size_t length) {
+    glShaderSource(shader, 1, &string, &length);
+}
+#elif defined(USE_CG_SHADERS) && defined(DUMP_COMPILED_SHADERS)
+void load_shader(GLuint shader, const char * string, size_t length) {
+    char* xxh_name = str_xxhsum(string, length);
+
+    char gxp_path[256];
+    char cg_path[256];
+    snprintf(gxp_path, sizeof(gxp_path), DATA_PATH"gxp/%c/%s.gxp", xxh_name[0], xxh_name);
+    snprintf(cg_path, sizeof(cg_path), DATA_PATH"cg/%c/%s.cg", xxh_name[0], xxh_name);
+
+    if (file_exists(gxp_path)) {
+        uint8_t *buffer;
+        size_t size;
+
+        file_load(gxp_path, &buffer, &size);
+
+        glShaderBinary(1, &shader, 0, buffer, (int32_t) size);
+
+        free(buffer);
+        skip_next_compile = GL_TRUE;
+    } else if (file_exists(cg_path)) {
+        char *buffer;
+        size_t size;
+
+        file_load(cg_path, (uint8_t **) &buffer, &size);
+
+        // Fixed: previously passed the game's GLSL text with the .cg file's length.
+        GLint cg_len = (GLint) size;
+        glShaderSource(shader, 1, (const GLchar * const *) &buffer, &cg_len);
+        strcpy(next_shader_fname, gxp_path);
+
+        free(buffer);
+        skip_next_compile = GL_FALSE;
+    } else {
+        l_warn("Encountered an untranslated shader %s, saving GLSL "
+               "and using a dummy shader.", xxh_name);
+        next_shader_fname[0] = '\0'; // never cache the placeholder
+
+        char glsl_path[256];
+        snprintf(glsl_path, sizeof(glsl_path), DATA_PATH"glsl/%c/%s.glsl", xxh_name[0], xxh_name);
+        file_mkpath(glsl_path, 0777);
+        file_save(glsl_path, (const uint8_t *) string, length);
+
+        if (strstr(string, "gl_FragColor")) {
+            const char *dummy_shader = "float4 main() { return float4(1.0,1.0,1.0,1.0); }";
+            int32_t dummy_shader_len = (int32_t) strlen(dummy_shader);
+            glShaderSource(shader, 1, &dummy_shader, &dummy_shader_len);
+        } else {
+            const char *dummy_shader = "void main(float4 out gl_Position : POSITION ) { gl_Position = float4(1.0,1.0,1.0,1.0); }";
+            int32_t dummy_shader_len = (int32_t) strlen(dummy_shader);
+            glShaderSource(shader, 1, &dummy_shader, &dummy_shader_len);
+        }
+
+        skip_next_compile = GL_FALSE;
+    }
+
+    free(xxh_name);
+}
+#elif defined(USE_CG_SHADERS) || defined(USE_GXP_SHADERS)
+void load_shader(GLuint shader, const char * string, size_t length) {
+    char* xxh_name = str_xxhsum(string, length);
+
+    char path[256];
+#ifdef USE_CG_SHADERS
+    snprintf(path, sizeof(path), DATA_PATH"cg/%c/%s.cg", xxh_name[0], xxh_name);
+#else
+    snprintf(path, sizeof(path), "app0:gxp/%c/%s.gxp", xxh_name[0], xxh_name);
+#endif
+
+    if (file_exists(path)) {
+#ifdef USE_CG_SHADERS
+        char *buffer;
+        size_t size;
+
+        file_load(path, (uint8_t **) &buffer, &size);
+
+        // Fixed: previously passed the game's GLSL text with the .cg file's length.
+        GLint cg_len = (GLint) size;
+        glShaderSource(shader, 1, (const GLchar * const *) &buffer, &cg_len);
+
+        free(buffer);
+#else
+        uint8_t *buffer;
+        size_t size;
+
+        file_load(path, &buffer, &size);
+
+        glShaderBinary(1, &shader, 0, buffer, (int32_t) size);
+
+        free(buffer);
+#endif
+    } else {
+        l_warn("Encountered an untranslated shader %s, saving GLSL "
+               "and using a dummy shader.", xxh_name);
+        next_shader_fname[0] = '\0'; // never cache the placeholder
+
+        char glsl_path[256];
+        snprintf(glsl_path, sizeof(glsl_path), DATA_PATH"glsl/%c/%s.glsl", xxh_name[0], xxh_name);
+        file_mkpath(glsl_path, 0777);
+        file_save(glsl_path, (const uint8_t *) string, length);
+
+        if (strstr(string, "gl_FragColor")) {
+            const char *dummy_shader = "void main(float4 out gl_FragColor : COLOR) { gl_FragColor = float4(1.0,1.0,1.0,1.0); }";
+            int32_t dummy_shader_len = (int32_t) strlen(dummy_shader);
+            glShaderSource(shader, 1, &dummy_shader, &dummy_shader_len);
+        } else {
+            const char *dummy_shader = "void main(float4 out gl_Position : POSITION ) { gl_Position = float4(1.0,1.0,1.0,1.0); }";
+            int32_t dummy_shader_len = (int32_t) strlen(dummy_shader);
+            glShaderSource(shader, 1, &dummy_shader, &dummy_shader_len);
+        }
+    }
+
+    free(xxh_name);
+}
+#else
+#error "Define one of (USE_GLSL_SHADERS, USE_CG_SHADERS, USE_GXP_SHADERS)"
+#endif

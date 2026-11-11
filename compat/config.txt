@@ -1,0 +1,2 @@
+setting_openWebBrowser 0
+setting_patchControls 1

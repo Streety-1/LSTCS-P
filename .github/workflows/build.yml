@@ -1,0 +1,50 @@
+name: Build
+
+# Compiles the audio library and the loader with VitaSDK (softfp) and produces
+# LSTCS-P-base.vpk. It contains no game files: players add their own
+# copy with "LSTCS-P_Build.bat". Pushing a tag like v1.0.0 publishes a release,
+# which the builder downloads automatically.
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: vitasdk/vitasdk-softfp:latest
+    steps:
+      - name: Install build tools
+        run: |
+          if command -v apk >/dev/null; then apk add --no-cache cmake make git bash python3; \
+          elif command -v apt-get >/dev/null; then apt-get update && apt-get install -y cmake make git python3; fi
+
+      - uses: actions/checkout@v4
+
+      - name: Build OpenSL ES (LSWTCS fixes)
+        working-directory: compat/opensles/libopensles
+        run: |
+          make LSWTCS=1 -j"$(nproc)"
+          make LSWTCS=1 install
+
+      - name: Build loader
+        run: |
+          cmake -S compat/loader -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j"$(nproc)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LSTCS-P-base
+          path: build/LSTCS-P-base.vpk
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/LSTCS-P-base.vpk

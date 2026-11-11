@@ -1,0 +1,97 @@
+/*
+ * Copyright (C) 2010 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/** \file SDL.c SDL platform implementation */
+
+#include "sles_allinclusive.h"
+#include <vitasdk.h>
+
+/** \brief Called by SDL to fill the next audio output buffer */
+IEngine *slEngine;
+
+uint8_t audio_buffers[SndFile_NUMBUFS][SndFile_BUFSIZE];
+#ifdef HAVE_PTHREAD
+static void audioThread(void* arg) {
+#else
+static int audioThread(unsigned int args, void* arg) {
+#endif
+	int ch = sceAudioOutOpenPort(SCE_AUDIO_OUT_PORT_TYPE_BGM, SndFile_BUFSIZE / 4, &_opensles_user_freq != NULL ? _opensles_user_freq : 44100, SCE_AUDIO_OUT_MODE_STEREO);
+	if (ch < 0) {
+		// LSTCS-P: the original ignored this and then fed audio to an
+		// invalid port forever. Retry once on the MAIN port before giving up quietly.
+		sceClibPrintf("OpenSLES: BGM port open failed (0x%08X), trying MAIN\n", ch);
+		ch = sceAudioOutOpenPort(SCE_AUDIO_OUT_PORT_TYPE_MAIN, SndFile_BUFSIZE / 4, &_opensles_user_freq != NULL ? _opensles_user_freq : 44100, SCE_AUDIO_OUT_MODE_STEREO);
+		if (ch < 0) {
+			sceClibPrintf("OpenSLES: no audio port available (0x%08X), audio disabled\n", ch);
+#ifdef HAVE_PTHREAD
+			return;
+#else
+			return sceKernelExitDeleteThread(0);
+#endif
+		}
+	}
+	sceAudioOutSetConfig(ch, -1, -1, (SceAudioOutMode)-1);
+	
+	int vol_stereo[] = {32767, 32767};
+	sceAudioOutSetVolume(ch, (SceAudioOutChannelFlag)(SCE_AUDIO_VOLUME_FLAG_L_CH | SCE_AUDIO_VOLUME_FLAG_R_CH), vol_stereo);
+	
+	int buf_idx = 0;
+	
+	for (;;) {
+		uint8_t *stream = audio_buffers[buf_idx];
+		sceClibMemset(stream, 0, (size_t)SndFile_BUFSIZE);
+		buf_idx = (buf_idx + 1) % SndFile_NUMBUFS;
+		
+		// A peek lock would be risky if output mixes are dynamic, so we use SDL_PauseAudio to
+		// temporarily disable callbacks during any change to the current output mix, and use a
+		// shared lock here
+		interface_lock_shared(slEngine);
+		COutputMix *outputMix = slEngine->mOutputMix;
+		interface_unlock_shared(slEngine);
+		if (NULL != outputMix) {
+			SLOutputMixExtItf OutputMixExt = &outputMix->mOutputMixExt.mItf;
+			IOutputMixExt_FillBuffer(OutputMixExt, stream, (SLuint32)SndFile_BUFSIZE);
+		}
+		
+		sceAudioOutOutput(ch, stream);
+	}
+	
+	return sceKernelExitDeleteThread(0);
+}
+
+/** \brief Called during slCreateEngine */
+
+void SDL_open(IEngine *thisEngine)
+{
+	slEngine = thisEngine;
+#ifdef HAVE_PTHREAD
+	pthread_t thd;
+	pthread_create(&thd, NULL, (void *(*)(void *)) audioThread, NULL);
+#else
+	// LSTCS-P: high priority (lower number = higher) so the mixer is never
+	// starved by the game's loading and render threads, which caused crackle and gaps.
+	// Kept on the "system" core, away from the game's three pinned threads.
+	SceUID thd = sceKernelCreateThread("OpenSLES Playback", &audioThread, 64, 0x10000, 0, SCE_KERNEL_CPU_MASK_SYSTEM, NULL);
+	sceKernelStartThread(thd, 0, NULL);
+#endif
+}
+
+
+/** \brief Called during Object::Destroy */
+
+void SDL_close(void)
+{
+}

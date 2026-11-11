@@ -1,0 +1,18 @@
+# Players' own game files and the builder's output never go on GitHub
+*.apk
+*.apks
+*.xapk
+*.apkm
+*.so
+*.dat
+Ready For Vita/
+compat/.work/
+compat/base/*.vpk
+
+# Build output
+build/
+cmake-build-*/
+compat/opensles/libopensles/*.o
+compat/opensles/libopensles/*.a
+.DS_Store
+.idea/
