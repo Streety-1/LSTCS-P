@@ -327,7 +327,7 @@ so_default_dynlib default_dynlib[] = {
         { "glCompressedTexImage2D", (uintptr_t)&glCompressedTexImage2D_soloader },
         { "glCopyTexImage2D", (uintptr_t)&glCopyTexImage2D_soloader },
         { "glCreateProgram", (uintptr_t)&glCreateProgram },
-        { "glCreateShader", (uintptr_t)&glCreateShader },
+        { "glCreateShader", (uintptr_t)&glCreateShader_soloader },
         { "glCullFace", (uintptr_t)&glCullFace },
         { "glDeleteBuffers", (uintptr_t)&glDeleteBuffers },
         { "glDeleteFramebuffers", (uintptr_t)&glDeleteFramebuffers },

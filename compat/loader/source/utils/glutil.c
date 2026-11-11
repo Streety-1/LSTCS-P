@@ -48,6 +48,22 @@ GLint uniforms[GLUTIL_MAX_PROGRAMS * GLUTIL_MAX_UNIFORMS];
 
 void load_shader(GLuint shader, const char * string, size_t length);
 
+/*
+ * Current vitaGL decides GLSL vs Cg from the shader *type*: GL_VERTEX_SHADER /
+ * GL_FRAGMENT_SHADER mean GLSL, which it may compile only at link time through its
+ * GLSL translator. This port always supplies Cg (the translated shaders/cg files),
+ * so create shaders with vitaGL's explicit Cg types. Without this, compiles report
+ * success but produce no program, and glLinkProgram crashes inside SceGxm.
+ * GL_SHADER_TYPE queries still return GL_VERTEX_SHADER / GL_FRAGMENT_SHADER.
+ */
+GLuint glCreateShader_soloader(GLenum shaderType) {
+#if defined(USE_CG_SHADERS)
+    if (shaderType == GL_VERTEX_SHADER) shaderType = GL_CG_VERTEX_SHADER_EXT;
+    else if (shaderType == GL_FRAGMENT_SHADER) shaderType = GL_CG_FRAGMENT_SHADER_EXT;
+#endif
+    return glCreateShader(shaderType);
+}
+
 void glCompileShader_soloader(GLuint shader) {
 #ifdef DEBUG_OPENGL
     sceClibPrintf("[gl_dbg] glCompileShader<%p>(shader: %i)\n", __builtin_return_address(0), shader);

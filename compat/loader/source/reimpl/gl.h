@@ -25,6 +25,7 @@ void glBufferData_soloader(GLenum target, GLsizei size, const void *data, GLenum
 void glBufferSubData_soloader(GLenum target, GLintptr offset, GLsizeiptr size, const void *data);
 
 void glCompileShader_soloader(GLuint shader);
+GLuint glCreateShader_soloader(GLenum shaderType);
 
 void glCompressedTexImage2D_soloader(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height,
                                      GLint border, GLsizei imageSize, const void *data);
