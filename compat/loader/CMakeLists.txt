@@ -8,6 +8,11 @@ set(CMAKE_TOOLCHAIN_FILE "$ENV{VITASDK}/share/vita.toolchain.cmake" CACHE PATH "
 
 project(so_loader C CXX)
 
+# Newer VitaSDK compilers default to C23, where e.g. `bool` is a keyword; this code
+# (and its libraries) was written for C11.
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_EXTENSIONS ON)
+
 include("${VITASDK}/share/vita.cmake" REQUIRED)
 
 # Vita application configuration
