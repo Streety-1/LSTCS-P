@@ -16,8 +16,8 @@
 
 extern _Thread_local _egl_context* current_context;
 
-EGLBoolean eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor) {
-    l_debug("eglInitialize(0x%x)", (int)dpy);
+EGLBoolean eglInitialize_soloader(EGLDisplay dpy, EGLint *major, EGLint *minor) {
+    l_debug("eglInitialize_soloader(0x%x)", (int)dpy);
 
     vglInitWithCustomThreshold(0, 960, 544, 18 * 1024 * 1024, 0, 0, 0, SCE_GXM_MULTISAMPLE_4X);
 
@@ -27,7 +27,7 @@ EGLBoolean eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor) {
     return EGL_TRUE;
 }
 
-EGLBoolean eglQueryContext(EGLDisplay dpy, EGLContext ctx, EGLint attribute,
+EGLBoolean eglQueryContext_soloader(EGLDisplay dpy, EGLContext ctx, EGLint attribute,
                            EGLint *value) {
     EGLBoolean ret = EGL_TRUE;
     switch (attribute) {
@@ -44,7 +44,7 @@ EGLBoolean eglQueryContext(EGLDisplay dpy, EGLContext ctx, EGLint attribute,
             *value = EGL_BACK_BUFFER;
             break;
         default:
-            l_error("eglQueryContext / EGL_BAD_ATTRIBUTE: 0x%x", attribute);
+            l_error("eglQueryContext_soloader / EGL_BAD_ATTRIBUTE: 0x%x", attribute);
             ret = EGL_FALSE;
             break;
     }
@@ -53,7 +53,7 @@ EGLBoolean eglQueryContext(EGLDisplay dpy, EGLContext ctx, EGLint attribute,
 }
 
 
-EGLBoolean eglQuerySurface(EGLDisplay dpy, EGLSurface eglSurface,
+EGLBoolean eglQuerySurface_soloader(EGLDisplay dpy, EGLSurface eglSurface,
                            EGLint attribute, EGLint *value) {
     EGLBoolean ret = EGL_TRUE;
     switch (attribute) {
@@ -109,7 +109,7 @@ EGLBoolean eglQuerySurface(EGLDisplay dpy, EGLSurface eglSurface,
             *value = EGL_FALSE;
             break;
         default:
-            l_error("eglQuerySurface / EGL_BAD_ATTRIBUTE: 0x%x", attribute);
+            l_error("eglQuerySurface_soloader / EGL_BAD_ATTRIBUTE: 0x%x", attribute);
             ret = EGL_FALSE;
             break;
     }
@@ -118,7 +118,7 @@ EGLBoolean eglQuerySurface(EGLDisplay dpy, EGLSurface eglSurface,
 }
 
 
-EGLBoolean eglGetConfigAttrib(EGLDisplay display, EGLConfig config,
+EGLBoolean eglGetConfigAttrib_soloader(EGLDisplay display, EGLConfig config,
                               EGLint attribute, EGLint * value) {
     switch (attribute) {
         case EGL_ALPHA_SIZE: {
@@ -250,13 +250,13 @@ EGLBoolean eglGetConfigAttrib(EGLDisplay display, EGLConfig config,
             break;
         }
         default:
-            l_error("eglGetConfigAttrib / EGL_BAD_ATTRIBUTE: 0x%x", attribute);
+            l_error("eglGetConfigAttrib_soloader / EGL_BAD_ATTRIBUTE: 0x%x", attribute);
             return EGL_FALSE;
     }
     return EGL_TRUE;
 }
 
-EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list,
+EGLBoolean eglChooseConfig_soloader(EGLDisplay dpy, const EGLint *attrib_list,
                            EGLConfig *configs, EGLint config_size,
                            EGLint *num_config) {
     if (!num_config) {
@@ -274,26 +274,26 @@ EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list,
     return EGL_TRUE;
 }
 
-EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig config,
+EGLContext eglCreateContext_soloader(EGLDisplay dpy, EGLConfig config,
                             EGLContext share_context,
                             const EGLint *attrib_list) {
     _egl_context *context = calloc(1, sizeof(_egl_context));
     return context;
 }
 
-EGLSurface eglCreatePbufferSurface(EGLDisplay dpy, EGLConfig config,
+EGLSurface eglCreatePbufferSurface_soloader(EGLDisplay dpy, EGLConfig config,
                                    const EGLint *attrib_list) {
     // Just something that is a valid pointer which can be freed later
     return strdup("pbuffer");
 }
 
-EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig config,
+EGLSurface eglCreateWindowSurface_soloader(EGLDisplay dpy, EGLConfig config,
                                   void * win, const EGLint *attrib_list) {
     // Just something that is a valid pointer which can be freed later
     return strdup("window");
 }
 
-EGLBoolean eglMakeCurrent(EGLDisplay dpy, EGLSurface draw, EGLSurface read,
+EGLBoolean eglMakeCurrent_soloader(EGLDisplay dpy, EGLSurface draw, EGLSurface read,
                           EGLContext ctx) {
     _egl_context *context = ctx;
 
@@ -312,26 +312,26 @@ EGLBoolean eglMakeCurrent(EGLDisplay dpy, EGLSurface draw, EGLSurface read,
     return EGL_TRUE;
 }
 
-EGLBoolean eglDestroyContext (EGLDisplay dpy, EGLContext ctx) {
+EGLBoolean eglDestroyContext_soloader (EGLDisplay dpy, EGLContext ctx) {
     if (ctx) free(ctx);
     return EGL_TRUE;
 }
 
-EGLBoolean eglDestroySurface (EGLDisplay dpy, EGLSurface surface) {
+EGLBoolean eglDestroySurface_soloader (EGLDisplay dpy, EGLSurface surface) {
     if (surface) free(surface);
     return EGL_TRUE;
 }
 
-EGLBoolean eglTerminate(EGLDisplay dpy) {
+EGLBoolean eglTerminate_soloader(EGLDisplay dpy) {
     // TODO: Maybe keep track of contexts and free
     return EGL_TRUE;
 }
 
-EGLContext eglGetCurrentContext (void) {
+EGLContext eglGetCurrentContext_soloader (void) {
     return current_context;
 }
 
-char const * eglQueryString(EGLDisplay display, EGLint name) {
+char const * eglQueryString_soloader(EGLDisplay display, EGLint name) {
     switch (name) {
     case EGL_CLIENT_APIS:
         return "OpenGL OpenGL_ES";
@@ -354,10 +354,10 @@ char const * eglQueryString(EGLDisplay display, EGLint name) {
     }
 }
 
-EGLBoolean eglGetConfigs(EGLDisplay display, EGLConfig * configs,
+EGLBoolean eglGetConfigs_soloader(EGLDisplay display, EGLConfig * configs,
                          EGLint config_size, EGLint * num_config) {
     if (!num_config) {
-        l_error("eglGetConfigs / EGL_BAD_PARAMETER");
+        l_error("eglGetConfigs_soloader / EGL_BAD_PARAMETER");
         return EGL_FALSE;
     }
 

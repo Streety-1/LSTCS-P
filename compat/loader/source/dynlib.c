@@ -294,18 +294,18 @@ so_default_dynlib default_dynlib[] = {
 
         // EGL
         { "eglBindAPI", (uintptr_t)&eglBindAPI },
-        { "eglChooseConfig", (uintptr_t)&eglChooseConfig },
-        { "eglCreateContext", (uintptr_t)&eglCreateContext },
-        { "eglCreatePbufferSurface", (uintptr_t)&eglCreatePbufferSurface },
-        { "eglCreateWindowSurface", (uintptr_t)&eglCreateWindowSurface },
-        { "eglDestroySurface", (uintptr_t)&eglDestroySurface },
-        { "eglGetConfigAttrib", (uintptr_t)&eglGetConfigAttrib },
+        { "eglChooseConfig", (uintptr_t)&eglChooseConfig_soloader },
+        { "eglCreateContext", (uintptr_t)&eglCreateContext_soloader },
+        { "eglCreatePbufferSurface", (uintptr_t)&eglCreatePbufferSurface_soloader },
+        { "eglCreateWindowSurface", (uintptr_t)&eglCreateWindowSurface_soloader },
+        { "eglDestroySurface", (uintptr_t)&eglDestroySurface_soloader },
+        { "eglGetConfigAttrib", (uintptr_t)&eglGetConfigAttrib_soloader },
         { "eglGetDisplay", (uintptr_t)&eglGetDisplay },
         { "eglGetError", (uintptr_t)&eglGetError },
         { "eglGetProcAddress", (uintptr_t)&eglGetProcAddress },
-        { "eglInitialize", (uintptr_t)&eglInitialize },
-        { "eglMakeCurrent", (uintptr_t)&eglMakeCurrent },
-        { "eglQuerySurface", (uintptr_t)&eglQuerySurface },
+        { "eglInitialize", (uintptr_t)&eglInitialize_soloader },
+        { "eglMakeCurrent", (uintptr_t)&eglMakeCurrent_soloader },
+        { "eglQuerySurface", (uintptr_t)&eglQuerySurface_soloader },
         { "eglSwapBuffers", (uintptr_t)&eglSwapBuffers },
 
 
