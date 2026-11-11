@@ -20,7 +20,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # ---------------------------------------------------------------- settings --
 $GitHubRepo   = 'Streety-1/LSTCS-P'   # where the base VPK is published
-$BaseVpkName  = 'LSTCS-P-base.vpk'
+$BaseVpkName  = 'LSTCS-P.vpk'
 $OutVpkName   = 'LEGO Star Wars - The Complete Saga Portable.vpk'
 $OutFolder    = 'Ready For Vita'
 $VitaDataDir  = 'ux0\data\lswtcs'

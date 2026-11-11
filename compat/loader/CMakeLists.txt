@@ -18,7 +18,7 @@ include("${VITASDK}/share/vita.cmake" REQUIRED)
 # Vita application configuration
 set(VITA_APP_NAME "LEGO Star Wars: The Complete Saga Portable")
 set(VITA_TITLEID "LSWV00001")
-set(VITA_VPKNAME "LSTCS-P-base")
+set(VITA_VPKNAME "LSTCS-P")
 set(VITA_VERSION "01.00")
 set(VITA_MKSFOEX_FLAGS "-d ATTRIBUTE2=12")
 set(VITA_MAKE_FSELF_FLAGS "${VITA_MAKE_FSELF_FLAGS} -a 0x2800000000000000")

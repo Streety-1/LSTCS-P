@@ -1,9 +1,10 @@
 name: Build
 
-# Compiles the audio library and the loader with VitaSDK (softfp) and produces
-# LSTCS-P-base.vpk. It contains no game files: players add their own
-# copy with "LSTCS-P_Build.bat". Pushing a tag like v1.0.0 publishes a release,
-# which the builder downloads automatically.
+# Compiles the audio library and the loader with VitaSDK (softfp). It contains no game
+# files: players add their own copy with "LSTCS-P_Build.bat". Pushing a tag like v1.0.0
+# publishes a release with two downloads:
+#   LSTCS-P.vpk  the compiled port on its own
+#   LSTCS-P.zip  everything a player needs: the builder, its files and the VPK
 
 on:
   push:
@@ -22,8 +23,8 @@ jobs:
     steps:
       - name: Install build tools
         run: |
-          if command -v apk >/dev/null; then apk add --no-cache cmake make git bash python3; \
-          elif command -v apt-get >/dev/null; then apt-get update && apt-get install -y cmake make git python3; fi
+          if command -v apk >/dev/null; then apk add --no-cache cmake make git bash python3 zip; \
+          elif command -v apt-get >/dev/null; then apt-get update && apt-get install -y cmake make git python3 zip; fi
 
       - uses: actions/checkout@v4
 
@@ -38,13 +39,27 @@ jobs:
           cmake -S compat/loader -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build -j"$(nproc)"
 
+      - name: Package LSTCS-P.zip
+        run: |
+          D=dist/LSTCS-P
+          mkdir -p "$D/compat/base"
+          cp LSTCS-P_Build.bat LICENSE "$D/"
+          cp "compat/HOW TO INSTALL.txt" "$D/"
+          cp compat/build.ps1 compat/shaders.zip compat/config.txt "compat/HOW TO INSTALL.txt" "$D/compat/"
+          cp build/LSTCS-P.vpk "$D/compat/base/"
+          (cd dist && zip -r -9 ../LSTCS-P.zip LSTCS-P)
+
       - uses: actions/upload-artifact@v4
         with:
-          name: LSTCS-P-base
-          path: build/LSTCS-P-base.vpk
+          name: LSTCS-P
+          path: |
+            build/LSTCS-P.vpk
+            LSTCS-P.zip
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: build/LSTCS-P-base.vpk
+          files: |
+            build/LSTCS-P.vpk
+            LSTCS-P.zip
