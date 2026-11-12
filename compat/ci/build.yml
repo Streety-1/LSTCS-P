@@ -31,13 +31,15 @@ jobs:
       # The original port was written against the vitaGL of September 2024. Newer vitaGL
       # reworked shaders, uniforms and the texture functions, which broke this game's
       # rendering (stretched/missing objects, black floors), so that version is pinned.
+      # Built without the GLSL translator, like the VitaSDK package the original used:
+      # with it, vitaGL treats the game's Cg shaders as GLSL and none of them compile.
       - name: Build vitaGL (pinned to the version the original port used)
         run: |
           git clone https://github.com/Rinnegatamante/vitaGL /tmp/vitaGL
           cd /tmp/vitaGL
           git checkout f8d8bbd2238fefaf3b8f58a4ffb335e54e04e1e5
           sed -i 's/^CFLAGS  = /CFLAGS  = -std=gnu11 -Wno-error=incompatible-pointer-types -Wno-error=int-conversion -Wno-error=implicit-function-declaration -Wno-error=return-mismatch /' Makefile
-          make SOFTFP_ABI=1 NO_DEBUG=1 HAVE_GLSL_SUPPORT=1 -j"$(nproc)"
+          make SOFTFP_ABI=1 NO_DEBUG=1 -j"$(nproc)"
           cp libvitaGL.a "$VITASDK/arm-vita-eabi/lib/"
           cp source/vitaGL.h "$VITASDK/arm-vita-eabi/include/"
 
