@@ -57,7 +57,7 @@ void load_shader(GLuint shader, const char * string, size_t length);
  * GL_SHADER_TYPE queries still return GL_VERTEX_SHADER / GL_FRAGMENT_SHADER.
  */
 GLuint glCreateShader_soloader(GLenum shaderType) {
-#if defined(USE_CG_SHADERS)
+#if defined(USE_CG_SHADERS) && defined(GL_CG_VERTEX_SHADER_EXT)   // only newer vitaGL needs this
     if (shaderType == GL_VERTEX_SHADER) shaderType = GL_CG_VERTEX_SHADER_EXT;
     else if (shaderType == GL_FRAGMENT_SHADER) shaderType = GL_CG_FRAGMENT_SHADER_EXT;
 #endif
@@ -191,7 +191,7 @@ void load_shader(GLuint shader, const char * string, size_t length) {
     snprintf(current_shader_name, sizeof(current_shader_name), "%s", xxh_name);
 
     char gxp_path[256];
-    snprintf(gxp_path, sizeof(gxp_path), "%sgxp/%c/%s.gxp", data_path(), xxh_name[0], xxh_name);
+    snprintf(gxp_path, sizeof(gxp_path), "%sshadercache/%c/%s.gxp", data_path(), xxh_name[0], xxh_name);
 
     if (file_exists(gxp_path)) {
         uint8_t *buffer;
@@ -221,7 +221,7 @@ void load_shader(GLuint shader, const char * string, size_t length) {
 
     char gxp_path[256];
     char cg_path[256];
-    snprintf(gxp_path, sizeof(gxp_path), "%sgxp/%c/%s.gxp", data_path(), xxh_name[0], xxh_name);
+    snprintf(gxp_path, sizeof(gxp_path), "%sshadercache/%c/%s.gxp", data_path(), xxh_name[0], xxh_name);
     snprintf(cg_path, sizeof(cg_path), "%scg/%c/%s.cg", data_path(), xxh_name[0], xxh_name);
 
     if (file_exists(gxp_path)) {

@@ -107,21 +107,6 @@ void glBufferSubData_soloader(GLenum target, GLintptr offset, GLsizeiptr size, c
     glNamedBufferSubData(current_context->buffers[target - GL_ARRAY_BUFFER], offset, size, data);
 }
 
-/*
- * Current vitaGL's direct-state texture functions (glTextureImage2D & co.) take only a
- * texture id and handle plain 2D textures. The original port was built against a vitaGL
- * that also took a target, so cube-map faces could be uploaded the same way. For cube
- * maps we briefly bind the texture, use the classic call with the face target, and then
- * restore the previous binding so the loader's own texture tracking is undisturbed.
- */
-#define WITH_CUBE_MAP_BOUND(tex, call) do { \
-        GLint prev_cube_ = 0; \
-        glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &prev_cube_); \
-        glBindTexture(GL_TEXTURE_CUBE_MAP, (tex)); \
-        call; \
-        glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint) prev_cube_); \
-    } while (0)
-
 // Logs each new kind of texture the game uploads (once), so formats that vitaGL
 // handles badly show up in the log next to whatever looks wrong on screen.
 static void note_texture_kind(const char *call, GLenum a, GLenum b, GLenum c, GLsizei w, GLsizei h) {
@@ -150,11 +135,7 @@ void glCompressedTexImage2D_soloader(GLenum target, GLint level, GLenum internal
     const size_t i = target == GL_TEXTURE_2D ? 0 : 1;
     const GLuint tex = current_context->textures[current_context->texture * 2 + i];
     if (level == 0) note_texture_kind("glCompressedTexImage2D", internalformat, 0, 0, width, height);
-    if (i == 0)
-        glCompressedTextureImage2D(tex, level, internalformat, width, height, border, imageSize, data);
-    else
-        WITH_CUBE_MAP_BOUND(tex, glCompressedTexImage2D(target, level, internalformat, width, height, border,
-                                                        imageSize, data));
+    glCompressedTextureImage2D(tex, target, level, internalformat, width, height, border, imageSize, data);
 }
 
 void glCopyTexImage2D_soloader(GLenum target, GLint level, GLenum internalformat, GLint x, GLint y, GLsizei width,
@@ -266,18 +247,8 @@ GLint glGetUniformLocation_soloader(GLuint program, const GLchar *name) {
                   program, name, (void *) original, mapped);
     return mapped;
 #else
-    // GL drivers accept "name[0]" for the start of an array uniform; vitaGL only knows
-    // the bare name, so strip a trailing "[0]". Anything vitaGL still can't find is
-    // logged once, since a missing uniform leaves objects distorted or invisible.
-    char base[96];
-    const char *lookup = name;
-    size_t n = name ? strlen(name) : 0;
-    if (n > 3 && n < sizeof(base) && strcmp(name + n - 3, "[0]") == 0) {
-        memcpy(base, name, n - 3);
-        base[n - 3] = '\0';
-        lookup = base;
-    }
-    GLint loc = glGetUniformLocation(program, lookup);
+    // Same lookup as the original port; names it can't find are logged once.
+    GLint loc = glGetUniformLocation(program, name);
     if (loc == -1 && name) {
         static uint32_t seen[64];
         static unsigned seen_count = 0;
@@ -320,6 +291,20 @@ void glLinkProgram_soloader(GLuint program) {
 #define TEX_TRACKED 65536
 static uint8_t tex_is_compressed[TEX_TRACKED / 8];
 lstcs_tex_stats_t lstcs_tex_stats;
+
+// Textures are only compressed once graphics memory runs low: until then everything
+// is stored exactly as the game gives it, just like the original port.
+#define LOW_MEMORY_BYTES (40u * 1024 * 1024)
+static int memory_is_low(void) {
+    const size_t free = vglMemFree(VGL_MEM_VRAM) + vglMemFree(VGL_MEM_RAM) + vglMemFree(VGL_MEM_SLOW);
+    static int announced = 0;
+    if (free < LOW_MEMORY_BYTES && !announced) {
+        announced = 1;
+        lstcs_log("Graphics memory low (%u KB free): compressing large textures from now on",
+                  (unsigned) (free / 1024));
+    }
+    return free < LOW_MEMORY_BYTES;
+}
 
 static int is_pot(GLsizei v) { return v > 0 && (v & (v - 1)) == 0; }
 
@@ -403,7 +388,7 @@ static int upload_compressed(GLuint tex, GLint level, GLsizei width, GLsizei hei
     int compress;
     if (level == 0) {
         compress = bpp && pixels && is_pot(width) && is_pot(height) && width >= 4 && height >= 4 &&
-                   (int64_t) width * height >= TEX_COMPRESS_MIN_PIXELS;
+                   (int64_t) width * height >= TEX_COMPRESS_MIN_PIXELS && memory_is_low();
         if (tracked) {
             if (compress) tex_is_compressed[tex >> 3] |= bit;
             else tex_is_compressed[tex >> 3] &= ~bit;
@@ -439,7 +424,7 @@ static int upload_compressed(GLuint tex, GLint level, GLsizei width, GLsizei hei
     compress_dxt(blocks, src, aw, ah, alpha);
     lstcs_tex_stats.compress_us += sceKernelGetProcessTimeWide() - t0;
     free(conv);
-    glCompressedTextureImage2D(tex, level, alpha ? GL_COMPRESSED_RGBA_S3TC_DXT5_EXT : GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
+    glCompressedTextureImage2D(tex, GL_TEXTURE_2D, level, alpha ? GL_COMPRESSED_RGBA_S3TC_DXT5_EXT : GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
                                level ? aw : width, level ? ah : height, 0, size, blocks);
     free(blocks);
     lstcs_tex_stats.compressed++;
@@ -467,12 +452,8 @@ void glTexImage2D_soloader(GLenum target, GLint level, GLint internalformat, GLs
     const size_t i = target == GL_TEXTURE_2D ? 0 : 1;
     const GLuint tex = current_context->textures[current_context->texture * 2 + i];
     if (level == 0) note_texture_kind("glTexImage2D", internalformat, format, type, width, height);
-    if (i == 0) {
-        if (!upload_compressed(tex, level, width, height, format, type, pixels))
-            glTextureImage2D(tex, level, internalformat, width, height, border, format, type, pixels);
-    } else
-        WITH_CUBE_MAP_BOUND(tex, glTexImage2D(target, level, internalformat, width, height, border, format, type,
-                                              pixels));
+    if (i != 0 || !upload_compressed(tex, level, width, height, format, type, pixels))
+        glTextureImage2D(tex, target, level, internalformat, width, height, border, format, type, pixels);
 }
 
 void glTexParameteri_soloader(GLenum target, GLenum pname, GLint param) {
@@ -488,10 +469,7 @@ void glTexParameteri_soloader(GLenum target, GLenum pname, GLint param) {
 
     const size_t i = target == GL_TEXTURE_2D ? 0 : 1;
     const GLuint tex = current_context->textures[current_context->texture * 2 + i];
-    if (i == 0)
-        glTextureParameteri(tex, pname, param);
-    else
-        WITH_CUBE_MAP_BOUND(tex, glTexParameteri(GL_TEXTURE_CUBE_MAP, pname, param));
+    glTextureParameteri(tex, target, pname, param);
 }
 
 void glUniform1fv_soloader(GLint location, GLsizei count, const GLfloat *value) {
@@ -664,27 +642,15 @@ GLint find_uniform(const GLuint p, const GLint u) {
  */
 volatile unsigned int lstcs_skipped_fbo_ops = 0;
 
-static int fbo_unusable(void) {
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE)
-        return 0;
-    unsigned int n = ++lstcs_skipped_fbo_ops;
-    if (n <= 5)
-        lstcs_log("Skipping draw/clear on a framebuffer vitaGL can't render to (no colour texture)%s",
-                  n == 5 ? " - further ones are only counted in the heartbeat" : "");
-    return 1;
-}
-
+// Plain pass-throughs (kept as functions so the GL lock wrappers stay unchanged).
 void glClear_soloader(GLbitfield mask) {
-    if (fbo_unusable()) return;
     glClear(mask);
 }
 
 void glDrawArrays_soloader(GLenum mode, GLint first, GLsizei count) {
-    if (fbo_unusable()) return;
     glDrawArrays(mode, first, count);
 }
 
 void glDrawElements_soloader(GLenum mode, GLsizei count, GLenum type, const void *indices) {
-    if (fbo_unusable()) return;
     glDrawElements(mode, count, type, indices);
 }

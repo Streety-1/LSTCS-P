@@ -183,10 +183,10 @@ void *controls_thread() {
         if (++ticks >= 600) {
             ticks = 0;
             unsigned int f = lstcs_frames;
-            lstcs_log("heartbeat: %u frames total, %u in the last ~5s | GPU mem free: VRAM %u KB, RAM %u KB, PHYCONT %u KB | skipped FBO ops %u",
+            lstcs_log("heartbeat: %u frames total, %u in the last ~5s | GPU mem free: VRAM %u KB, RAM %u KB, PHYCONT %u KB",
                       f, f - last_frames,
                       (unsigned) (vglMemFree(VGL_MEM_VRAM) / 1024), (unsigned) (vglMemFree(VGL_MEM_RAM) / 1024),
-                      (unsigned) (vglMemFree(VGL_MEM_PHYCONT) / 1024), lstcs_skipped_fbo_ops);
+                      (unsigned) (vglMemFree(VGL_MEM_SLOW) / 1024));
             struct mallinfo mi = mallinfo();
             lstcs_log("  textures: %u uploads, %u compressed to DXT (%u non-power-of-two, %u other formats left as-is), %u MB raw -> %u MB stored, %u ms compressing, %u mip levels skipped | game heap used %u MB",
                       lstcs_tex_stats.uploads, lstcs_tex_stats.compressed, lstcs_tex_stats.npot, lstcs_tex_stats.other_format,
