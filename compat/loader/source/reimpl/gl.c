@@ -9,6 +9,7 @@
 
 #include "utils/glutil.h"
 #include "utils/logger.h"
+#include "utils/utils.h"
 
 #include <psp2/kernel/clib.h>
 
@@ -456,4 +457,39 @@ GLint find_uniform(const GLuint p, const GLint u) {
 
     l_error("MORE THEN %u UNIFORMS USED", GLUTIL_MAX_UNIFORMS);
     return -1;
+}
+
+/*
+ * vitaGL can only render into a framebuffer object that has a colour *texture*
+ * attached (glCheckFramebufferStatus reports that). Depth-only FBOs (e.g. shadow
+ * maps) or colour renderbuffers give it no render target, so sceGxmBeginScene fails
+ * and the next clear/draw writes through an invalid uniform-buffer pointer, crashing
+ * inside SceGxm (seen when starting a level). Skip clears and draws aimed at such a
+ * framebuffer: worst case that effect is missing, instead of the game crashing.
+ */
+volatile unsigned int lstcs_skipped_fbo_ops = 0;
+
+static int fbo_unusable(void) {
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE)
+        return 0;
+    unsigned int n = ++lstcs_skipped_fbo_ops;
+    if (n <= 5)
+        lstcs_log("Skipping draw/clear on a framebuffer vitaGL can't render to (no colour texture)%s",
+                  n == 5 ? " - further ones are only counted in the heartbeat" : "");
+    return 1;
+}
+
+void glClear_soloader(GLbitfield mask) {
+    if (fbo_unusable()) return;
+    glClear(mask);
+}
+
+void glDrawArrays_soloader(GLenum mode, GLint first, GLsizei count) {
+    if (fbo_unusable()) return;
+    glDrawArrays(mode, first, count);
+}
+
+void glDrawElements_soloader(GLenum mode, GLsizei count, GLenum type, const void *indices) {
+    if (fbo_unusable()) return;
+    glDrawElements(mode, count, type, indices);
 }

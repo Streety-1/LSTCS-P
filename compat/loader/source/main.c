@@ -7,6 +7,8 @@
 
 #include "reimpl/keycodes.h"
 #include "reimpl/egl.h"
+#include "reimpl/gl.h"
+#include <vitaGL.h>
 
 #include <stdlib.h>
 
@@ -175,7 +177,10 @@ void *controls_thread() {
         if (++ticks >= 600) {
             ticks = 0;
             unsigned int f = lstcs_frames;
-            lstcs_log("heartbeat: %u frames total, %u in the last ~5s", f, f - last_frames);
+            lstcs_log("heartbeat: %u frames total, %u in the last ~5s | GPU mem free: VRAM %u KB, RAM %u KB, PHYCONT %u KB | skipped FBO ops %u",
+                      f, f - last_frames,
+                      (unsigned) (vglMemFree(VGL_MEM_VRAM) / 1024), (unsigned) (vglMemFree(VGL_MEM_RAM) / 1024),
+                      (unsigned) (vglMemFree(VGL_MEM_PHYCONT) / 1024), lstcs_skipped_fbo_ops);
             last_frames = f;
         }
     }

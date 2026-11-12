@@ -25,6 +25,10 @@ void glBufferData_soloader(GLenum target, GLsizei size, const void *data, GLenum
 void glBufferSubData_soloader(GLenum target, GLintptr offset, GLsizeiptr size, const void *data);
 
 void glCompileShader_soloader(GLuint shader);
+void glClear_soloader(GLbitfield mask);
+void glDrawArrays_soloader(GLenum mode, GLint first, GLsizei count);
+void glDrawElements_soloader(GLenum mode, GLsizei count, GLenum type, const void *indices);
+extern volatile unsigned int lstcs_skipped_fbo_ops;
 GLuint glCreateShader_soloader(GLenum shaderType);
 
 void glCompressedTexImage2D_soloader(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height,
