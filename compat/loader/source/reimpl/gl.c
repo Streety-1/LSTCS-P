@@ -12,6 +12,7 @@
 #include "utils/utils.h"
 
 #include <psp2/kernel/clib.h>
+#include <stdlib.h>
 #include <psp2/kernel/processmgr.h>
 
 #define PROGRAM_UNIFORM_SPEEDHACK
@@ -260,56 +261,122 @@ void glLinkProgram_soloader(GLuint program) {
 }
 
 /*
- * Texture memory: the game ships many textures only uncompressed (its ETC1 versions
- * are missing, so it falls back to raw RGBA). On a phone that fits; on the Vita the
- * first level used up every byte of graphics memory, so textures, the floor and
- * other geometry failed to load or came out wrong. Large uncompressed uploads are now
- * stored as DXT (vitaGL compresses them as they're uploaded): DXT5 keeps alpha at a
- * quarter the size of RGBA8888, DXT1 is an eighth. Render targets (no pixel data) and
- * small textures are left alone. A texture's extra mip levels follow whatever was
- * chosen for its level 0, so every level of a texture has the same format.
+ * Texture memory: the game ships many textures only uncompressed (their ETC1 versions
+ * are missing, so it falls back to raw pixels). On a phone that fits; on the Vita the
+ * first level used up every byte of graphics memory. Large power-of-two textures are
+ * now stored as DXT, which vitaGL compresses as they're uploaded: DXT5 (with alpha) is
+ * a quarter the size of RGBA8888, DXT1 an eighth.
+ *
+ * Two vitaGL limitations shape this, both of which garbled UI/text in a first attempt:
+ *  - Non-power-of-two textures are padded before compressing and then given their
+ *    original size, so rows land in the wrong place. Those are left uncompressed.
+ *  - Only level 0 is converted to RGBA8888 before compressing; mip levels are passed
+ *    through as-is. So every level is converted here first, and mip levels smaller
+ *    than a 4x4 DXT block are padded to one.
+ * A texture's mip levels follow whatever was chosen for its level 0.
  */
 #define TEX_COMPRESS_MIN_PIXELS (128 * 128)
 #define TEX_TRACKED 65536
 static uint8_t tex_is_compressed[TEX_TRACKED / 8];
 lstcs_tex_stats_t lstcs_tex_stats;
 
-static GLint pick_texture_storage(GLuint tex, GLint level, GLint internalformat, GLsizei width, GLsizei height,
-                                  GLenum format, GLenum type, const void *pixels) {
+static int is_pot(GLsizei v) { return v > 0 && (v & (v - 1)) == 0; }
+
+// Returns the input's bytes per pixel, and whether it has alpha, or 0 if unsupported.
+static int texel_info(GLenum format, GLenum type, int *alpha) {
+    if (format == GL_RGBA && type == GL_UNSIGNED_BYTE) { *alpha = 1; return 4; }
+    if (format == GL_RGB && type == GL_UNSIGNED_BYTE) { *alpha = 0; return 3; }
+    if (format == GL_RGB && type == GL_UNSIGNED_SHORT_5_6_5) { *alpha = 0; return 2; }
+    if (format == GL_RGBA && type == GL_UNSIGNED_SHORT_4_4_4_4) { *alpha = 1; return 2; }
+    if (format == GL_RGBA && type == GL_UNSIGNED_SHORT_5_5_5_1) { *alpha = 1; return 2; }
+    return 0;
+}
+
+// Converts any supported input to tightly packed RGBA8888 with rows padded to
+// (aw x ah) by repeating edge pixels. Source rows follow GL's default 4-byte unpack
+// alignment (the game never changes it). Returns a malloc'd buffer or NULL.
+static uint8_t *to_rgba8888(const uint8_t *src, GLsizei w, GLsizei h, GLsizei aw, GLsizei ah, GLenum type, int bpp) {
+    uint8_t *dst = malloc((size_t) aw * ah * 4);
+    if (!dst) return NULL;
+    const size_t stride = ((size_t) w * bpp + 3) & ~(size_t) 3;
+    for (GLsizei y = 0; y < ah; y++) {
+        const uint8_t *row = src + stride * (size_t) (y < h ? y : h - 1);
+        uint8_t *out = dst + (size_t) y * aw * 4;
+        for (GLsizei x = 0; x < aw; x++) {
+            const GLsizei sx = x < w ? x : w - 1;
+            uint8_t r, g, b, a = 255;
+            if (bpp == 4) {
+                const uint8_t *p = row + sx * 4; r = p[0]; g = p[1]; b = p[2]; a = p[3];
+            } else if (bpp == 3) {
+                const uint8_t *p = row + sx * 3; r = p[0]; g = p[1]; b = p[2];
+            } else {
+                const uint16_t v = (uint16_t) (row[sx * 2] | (row[sx * 2 + 1] << 8));
+                if (type == GL_UNSIGNED_SHORT_5_6_5) {
+                    r = (uint8_t) (((v >> 11) & 31) * 255 / 31); g = (uint8_t) (((v >> 5) & 63) * 255 / 63);
+                    b = (uint8_t) ((v & 31) * 255 / 31);
+                } else if (type == GL_UNSIGNED_SHORT_4_4_4_4) {
+                    r = (uint8_t) (((v >> 12) & 15) * 17); g = (uint8_t) (((v >> 8) & 15) * 17);
+                    b = (uint8_t) (((v >> 4) & 15) * 17); a = (uint8_t) ((v & 15) * 17);
+                } else { // 5_5_5_1
+                    r = (uint8_t) (((v >> 11) & 31) * 255 / 31); g = (uint8_t) (((v >> 6) & 31) * 255 / 31);
+                    b = (uint8_t) (((v >> 1) & 31) * 255 / 31); a = (v & 1) ? 255 : 0;
+                }
+            }
+            out[x * 4 + 0] = r; out[x * 4 + 1] = g; out[x * 4 + 2] = b; out[x * 4 + 3] = a;
+        }
+    }
+    return dst;
+}
+
+// Uploads a 2D texture level, compressing it to DXT when that's safe. Returns 1 if it
+// handled the upload, 0 if the caller should upload it unchanged.
+static int upload_compressed(GLuint tex, GLint level, GLsizei width, GLsizei height, GLenum format, GLenum type,
+                             const void *pixels) {
     const int tracked = tex < TEX_TRACKED;
     const uint8_t bit = (uint8_t) (1u << (tex & 7));
-    int alpha;
+    int alpha = 0;
+    const int bpp = texel_info(format, type, &alpha);
 
-    if (format == GL_RGBA && (type == GL_UNSIGNED_BYTE || type == GL_UNSIGNED_SHORT_4_4_4_4 || type == GL_UNSIGNED_SHORT_5_5_5_1))
-        alpha = 1;
-    else if (format == GL_RGB && (type == GL_UNSIGNED_BYTE || type == GL_UNSIGNED_SHORT_5_6_5))
-        alpha = 0;
-    else {
-        if (level == 0 && tracked) tex_is_compressed[tex >> 3] &= ~bit;
-        return internalformat;
-    }
-    const int bpp = type == GL_UNSIGNED_BYTE ? (alpha ? 4 : 3) : 2;
+    lstcs_tex_stats.uploads++;
+    if (!is_pot(width) || !is_pot(height)) lstcs_tex_stats.npot++;
+    if (bpp == 0) lstcs_tex_stats.other_format++;
+    lstcs_tex_stats.raw_bytes += (uint64_t) width * height * (bpp ? bpp : 4);
 
     int compress;
     if (level == 0) {
-        compress = pixels != NULL && (int64_t) width * height >= TEX_COMPRESS_MIN_PIXELS && width >= 4 && height >= 4;
+        compress = bpp && pixels && is_pot(width) && is_pot(height) && width >= 4 && height >= 4 &&
+                   (int64_t) width * height >= TEX_COMPRESS_MIN_PIXELS;
         if (tracked) {
             if (compress) tex_is_compressed[tex >> 3] |= bit;
             else tex_is_compressed[tex >> 3] &= ~bit;
         }
     } else {
-        compress = tracked && (tex_is_compressed[tex >> 3] & bit) && pixels != NULL;
+        compress = bpp && pixels && tracked && (tex_is_compressed[tex >> 3] & bit);
+    }
+    if (!compress) {
+        lstcs_tex_stats.stored_bytes += (uint64_t) width * height * (bpp ? bpp : 4);
+        return 0;
     }
 
-    lstcs_tex_stats.uploads++;
-    lstcs_tex_stats.raw_bytes += (uint64_t) width * height * bpp;
-    if (!compress) {
-        lstcs_tex_stats.stored_bytes += (uint64_t) width * height * bpp;
-        return internalformat;
+    const GLsizei aw = (width + 3) & ~3, ah = (height + 3) & ~3;
+    const uint8_t *src = pixels;
+    uint8_t *conv = NULL;
+    if (bpp != 4 || aw != width || ah != height) {
+        conv = to_rgba8888(pixels, width, height, aw, ah, type, bpp);
+        if (!conv) {
+            lstcs_tex_stats.stored_bytes += (uint64_t) width * height * bpp;
+            return 0;   // out of memory: fall back to the normal upload
+        }
+        src = conv;
     }
+    const uint64_t t0 = sceKernelGetProcessTimeWide();
+    glTextureImage2D(tex, level, alpha ? GL_COMPRESSED_RGBA_S3TC_DXT5_EXT : GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
+                     width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, src);
+    lstcs_tex_stats.compress_us += sceKernelGetProcessTimeWide() - t0;
+    free(conv);
     lstcs_tex_stats.compressed++;
-    lstcs_tex_stats.stored_bytes += (uint64_t) width * height / (alpha ? 1 : 2);
-    return alpha ? GL_COMPRESSED_RGBA_S3TC_DXT5_EXT : GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
+    lstcs_tex_stats.stored_bytes += (uint64_t) aw * ah / (alpha ? 1 : 2);
+    return 1;
 }
 
 void glTexImage2D_soloader(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height,
@@ -328,12 +395,8 @@ void glTexImage2D_soloader(GLenum target, GLint level, GLint internalformat, GLs
     const size_t i = target == GL_TEXTURE_2D ? 0 : 1;
     const GLuint tex = current_context->textures[current_context->texture * 2 + i];
     if (i == 0) {
-        GLint stored = pick_texture_storage(tex, level, internalformat, width, height, format, type, pixels);
-        uint64_t t0 = stored != internalformat ? sceKernelGetProcessTimeWide() : 0;
-        glTextureImage2D(tex, level, stored, width, height, border, format, type, pixels);
-        if (stored != internalformat) {
-            lstcs_tex_stats.compress_us += sceKernelGetProcessTimeWide() - t0;
-        }
+        if (!upload_compressed(tex, level, width, height, format, type, pixels))
+            glTextureImage2D(tex, level, internalformat, width, height, border, format, type, pixels);
     } else
         WITH_CUBE_MAP_BOUND(tex, glTexImage2D(target, level, internalformat, width, height, border, format, type,
                                               pixels));
