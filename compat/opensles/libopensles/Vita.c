@@ -22,10 +22,9 @@
 /** \brief Called by SDL to fill the next audio output buffer */
 IEngine *slEngine;
 
-// The loader provides this (writes to data/lswtcs/lstcs-log.txt); weak so the
-// library still links on its own.
-extern void lstcs_log(const char *fmt, ...) __attribute__((weak));
-#define AUDIO_LOG(...) do { if (lstcs_log) lstcs_log(__VA_ARGS__); } while (0)
+// The loader points lstcs_sles_log at its log (data/lswtcs/debug/lstcs-log.txt).
+
+#define AUDIO_LOG(...) do { if (lstcs_sles_log) lstcs_sles_log(__VA_ARGS__); } while (0)
 
 uint8_t audio_buffers[SndFile_NUMBUFS][SndFile_BUFSIZE];
 #ifdef HAVE_PTHREAD

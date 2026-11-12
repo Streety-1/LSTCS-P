@@ -15,7 +15,7 @@
 #define MAX_AUTO_SHOTS     40     // start-up, levels and the once-a-minute ones
 #define MAX_MANUAL_SHOTS   100
 #define PERIODIC_SHOT_US   (60ull * 1000000)
-#define LEVEL_SETTLE_US    (6ull * 1000000)   // no level file opened for this long = loaded
+#define LEVEL_SETTLE_US    (5ull * 1000000)   // no file opened for this long = loaded
 
 static char g_debug_dir[96];
 static char g_shot_dir[128];
@@ -136,12 +136,14 @@ int debug_screenshot(const char * tag) {
 
 // ------------------------------------------------------------ level detection --
 // Level files are opened as "levels\<area>\<name>\...". The newest level's name is
-// kept here; once no level file has been opened for a few seconds it's on screen.
+// kept here; once no file at all has been opened for a few seconds it's on screen.
 static char g_level_name[64];
 static volatile unsigned int g_level_seq = 0;
 static volatile uint64_t g_level_last_open = 0;
 
 void debug_note_file_open(const char * path) {
+    // Any file opened (characters, sounds...) means the level is still loading.
+    if (g_level_last_open) g_level_last_open = sceKernelGetProcessTimeWide();
     if (!path || strncasecmp(path, "levels", 6) != 0 || (path[6] != '\\' && path[6] != '/')) return;
     // Take "<area>\<name>" (the first two folders after "levels").
     const char * p = path + 7;

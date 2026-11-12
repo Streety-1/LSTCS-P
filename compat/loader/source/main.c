@@ -188,10 +188,10 @@ void *controls_thread() {
                       (unsigned) (vglMemFree(VGL_MEM_VRAM) / 1024), (unsigned) (vglMemFree(VGL_MEM_RAM) / 1024),
                       (unsigned) (vglMemFree(VGL_MEM_PHYCONT) / 1024), lstcs_skipped_fbo_ops);
             struct mallinfo mi = mallinfo();
-            lstcs_log("  textures: %u uploads, %u compressed to DXT (%u non-power-of-two, %u other formats left as-is), %u MB raw -> %u MB stored, %u ms compressing | game heap used %u MB",
+            lstcs_log("  textures: %u uploads, %u compressed to DXT (%u non-power-of-two, %u other formats left as-is), %u MB raw -> %u MB stored, %u ms compressing, %u mip levels skipped | game heap used %u MB",
                       lstcs_tex_stats.uploads, lstcs_tex_stats.compressed, lstcs_tex_stats.npot, lstcs_tex_stats.other_format,
                       (unsigned) (lstcs_tex_stats.raw_bytes >> 20), (unsigned) (lstcs_tex_stats.stored_bytes >> 20),
-                      (unsigned) (lstcs_tex_stats.compress_us / 1000), (unsigned) (mi.uordblks >> 20));
+                      (unsigned) (lstcs_tex_stats.compress_us / 1000), lstcs_tex_stats.mips_dropped, (unsigned) (mi.uordblks >> 20));
             extern volatile unsigned lstcs_sles_stats[16];
             const volatile unsigned *a = lstcs_sles_stats;
             lstcs_log("  audio: %u players created, %u failed (last error %u), %u buffers queued, %u dropped (queue full), %u refused (all mixer tracks busy), %u refused (object limit), %u play calls",

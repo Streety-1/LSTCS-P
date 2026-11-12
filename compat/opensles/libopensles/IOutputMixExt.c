@@ -396,8 +396,8 @@ SLresult IOutputMixExt_checkAudioPlayerSourceSink(CAudioPlayer *this)
             interface_unlock_exclusive(omExt);
             // All track slots full in output mix
             SLES_STAT_INC(SLES_STAT_TRACKS_FULL);
-            { extern void lstcs_log(const char *fmt, ...) __attribute__((weak));
-              if (lstcs_log) lstcs_log("Audio: all %d mixer tracks in use, a sound could not be played", MAX_TRACK); }
+            { 
+              if (lstcs_sles_log) lstcs_sles_log("Audio: all %d mixer tracks in use, a sound could not be played", MAX_TRACK); }
             return SL_RESULT_MEMORY_FAILURE;
         }
         unsigned i = ctz64(availMask);

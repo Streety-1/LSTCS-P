@@ -1367,4 +1367,6 @@ enum { SLES_STAT_PLAYERS_OK, SLES_STAT_PLAYERS_FAILED, SLES_STAT_LAST_FAIL, SLES
        SLES_STAT_DROPPED, SLES_STAT_TRACKS_FULL, SLES_STAT_OBJECTS_FULL, SLES_STAT_PLAY_CALLS,
        SLES_STAT_COUNT };
 extern volatile unsigned lstcs_sles_stats[16];
+/* Set by the loader to its log function (a weak reference here ended up unresolved) */
+extern void (*lstcs_sles_log)(const char *fmt, ...);
 #define SLES_STAT_INC(i) __atomic_add_fetch(&lstcs_sles_stats[i], 1, __ATOMIC_RELAXED)

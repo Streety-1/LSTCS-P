@@ -312,7 +312,8 @@ void glLinkProgram_soloader(GLuint program) {
  * because vitaGL's own runtime compressor lays blocks out wrongly for non-square
  * textures, which garbled the UI and text. Non-power-of-two textures are left
  * uncompressed. Every level is converted to RGBA8888 first, and mip levels smaller
- * than a 4x4 DXT block are padded to one.
+ * than a 4x4 DXT block are padded to one. Compressed textures keep only level 0 (see
+ * upload_compressed).
  * A texture's mip levels follow whatever was chosen for its level 0.
  */
 #define TEX_COMPRESS_MIN_PIXELS (128 * 128)
@@ -407,8 +408,14 @@ static int upload_compressed(GLuint tex, GLint level, GLsizei width, GLsizei hei
             if (compress) tex_is_compressed[tex >> 3] |= bit;
             else tex_is_compressed[tex >> 3] &= ~bit;
         }
+    } else if (tracked && (tex_is_compressed[tex >> 3] & bit)) {
+        // A compressed texture keeps only its full-size level. vitaGL grows the texture's
+        // memory for each extra level while the GPU may still be copying the previous
+        // one in, which scrambled text and menus drawn smaller than full size.
+        lstcs_tex_stats.mips_dropped++;
+        return 1;
     } else {
-        compress = bpp && pixels && tracked && (tex_is_compressed[tex >> 3] & bit);
+        compress = 0;
     }
     if (!compress) {
         lstcs_tex_stats.stored_bytes += (uint64_t) width * height * (bpp ? bpp : 4);

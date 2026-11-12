@@ -122,10 +122,10 @@ SLresult IBufferQueue_Enqueue(SLBufferQueueItf self, const void *pBuffer, SLuint
             result = SL_RESULT_BUFFER_INSUFFICIENT;
             SLES_STAT_INC(SLES_STAT_DROPPED);
             {
-                extern void lstcs_log(const char *fmt, ...) __attribute__((weak));
+                
                 static unsigned rejected = 0;
-                if (lstcs_log && (++rejected <= 5 || (rejected % 200) == 0))
-                    lstcs_log("Audio: buffer queue full, a sound buffer was dropped (%u so far)", rejected);
+                if (lstcs_sles_log && (++rejected <= 5 || (rejected % 200) == 0))
+                    lstcs_sles_log("Audio: buffer queue full, a sound buffer was dropped (%u so far)", rejected);
             }
         } else {
             SLES_STAT_INC(SLES_STAT_ENQUEUED);

@@ -33,6 +33,7 @@ extern volatile unsigned int lstcs_skipped_fbo_ops;
 
 typedef struct {
     unsigned int uploads, compressed, npot, other_format;
+    unsigned int mips_dropped;
     uint64_t raw_bytes, stored_bytes, compress_us;
 } lstcs_tex_stats_t;
 extern lstcs_tex_stats_t lstcs_tex_stats;

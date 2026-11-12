@@ -60,6 +60,10 @@ void soloader_init_all() {
 #define LSTCS_BUILD "local"
 #endif
     lstcs_log("LSTCS-P build %s (%s %s)", LSTCS_BUILD, __DATE__, __TIME__);
+    {
+        extern void (*lstcs_sles_log)(const char *fmt, ...);
+        lstcs_sles_log = lstcs_log;   // audio library messages go to the same log
+    }
 
 #ifdef USE_SCELIBC_IO
     if (fios_init(data_path()) == 0)
