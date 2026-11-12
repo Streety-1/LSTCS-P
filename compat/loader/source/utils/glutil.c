@@ -309,8 +309,11 @@ void load_shader(GLuint shader, const char * string, size_t length) {
         file_mkpath(glsl_path, 0777);
         file_save(glsl_path, (const uint8_t *) string, length);
 
-        lstcs_log("Shader %s has no translation in cg/ ; using a placeholder (GLSL saved to glsl/)", xxh_name);
+        lstcs_log("Shader %s has no precompiled/translated version; using a placeholder (GLSL saved to glsl/)", xxh_name);
         set_placeholder_source(shader);
+#ifdef USE_GXP_SHADERS
+        glCompileShader(shader);   // in GXP mode the game's own compile call is skipped
+#endif
     }
 
     free(xxh_name);

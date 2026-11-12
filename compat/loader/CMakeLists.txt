@@ -44,7 +44,7 @@ if (USE_SCELIBC_IO)
   add_compile_definitions(USE_SCELIBC_IO)
 endif()
 
-set(SHADER_FORMAT "CG" CACHE STRING "Preferred shader format (one of 'GLSL', 'CG', 'GXP')")
+set(SHADER_FORMAT "GXP" CACHE STRING "Preferred shader format (one of 'GLSL', 'CG', 'GXP')")
 if (${SHADER_FORMAT} STREQUAL "GLSL")
   add_compile_definitions(USE_GLSL_SHADERS)
 elseif (${SHADER_FORMAT} STREQUAL "CG")
@@ -170,11 +170,9 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 )
 
 vita_create_self(eboot.bin ${CMAKE_PROJECT_NAME} UNSAFE NOASLR)
-# LSTCS-P: precompiled .gxp shaders need Sony's psp2cgc and can't be
-# produced by the public build, so by default shaders ship as .cg (copied to
-# ux0:data/lswtcs/cg by the PC builder) and compile on the Vita via libshacccg.
-# Compiled shaders are cached in data/lswtcs/gxp after first use (glutil.c), so each
-# shader is only compiled once ever; later loads read the cached binary instead.
+# Shaders: the precompiled .gxp files from the original port's v0.1 release (MIT,
+# Jan Smialkowski), packed into the VPK exactly as the original did. Runtime Cg
+# compiling (SHADER_FORMAT=CG) remains available but isn't what the original shipped.
 set(VPK_SHADER_FILES "")
 if (${SHADER_FORMAT} STREQUAL "GXP")
   set(VPK_SHADER_FILES ${CMAKE_SOURCE_DIR}/shaders/gxp gxp)
