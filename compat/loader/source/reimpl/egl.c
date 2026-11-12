@@ -7,6 +7,7 @@
  */
 
 #include "reimpl/egl.h"
+#include "reimpl/gl_lock.h"
 
 #include "utils/glutil.h"
 #include "utils/logger.h"
@@ -375,5 +376,8 @@ volatile unsigned int lstcs_frames = 0;
 
 EGLBoolean eglSwapBuffers_soloader(EGLDisplay dpy, EGLSurface surface) {
     lstcs_frames++;
-    return eglSwapBuffers(dpy, surface);
+    gl_lock();
+    EGLBoolean ret = eglSwapBuffers(dpy, surface);
+    gl_unlock();
+    return ret;
 }
