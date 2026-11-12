@@ -20,7 +20,9 @@ set(VITA_APP_NAME "LEGO Star Wars: The Complete Saga Portable")
 set(VITA_TITLEID "LSWV00001")
 set(VITA_VPKNAME "LSTCS-P")
 set(VITA_VERSION "01.00")
-set(VITA_MKSFOEX_FLAGS "-d ATTRIBUTE2=12")
+# The content ID decides the folder VitaShell installs into (ux0:app/<id>). Left at its
+# default it was ABCD99999, which many homebrew apps share and would overwrite.
+set(VITA_MKSFOEX_FLAGS "-d ATTRIBUTE2=12 -s CONTENT_ID=HB0001-${VITA_TITLEID}_00-0000000000000000")
 set(VITA_MAKE_FSELF_FLAGS "${VITA_MAKE_FSELF_FLAGS} -a 0x2800000000000000")
 add_compile_definitions(TITLE_ID="${VITA_TITLEID}")
 
