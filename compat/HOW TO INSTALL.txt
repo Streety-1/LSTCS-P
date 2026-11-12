@@ -25,3 +25,13 @@ INSTALLING THE GAME
 
 If the game says files are missing, check that data/lswtcs/ (on one of those drives) contains
 libTTapp.so, Audio.dat, Levels.dat, Others.dat and Textures.dat.
+
+REPORTING A PROBLEM
+  The game keeps a  debug  folder inside data/lswtcs/ with everything needed to
+  look into a problem:
+    lstcs-log.txt            what happened this session
+    lstcs-log-previous.txt   the session before (so a crash's log isn't lost)
+    screenshots/             pictures taken at start-up, after each level loads,
+                             once a minute, and whenever you press L + R + SELECT
+    screenshots-previous/    the session before's pictures
+  If the game crashed, also grab the newest .psp2dmp file from ux0:data/.

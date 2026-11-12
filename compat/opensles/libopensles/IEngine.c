@@ -102,9 +102,12 @@ int idx = 0;
 // LSTCS-P: records each distinct kind of audio player the game creates (format and
 // whether creation worked) in lstcs-log.txt, to track down sounds that stay silent.
 extern void lstcs_log(const char *fmt, ...) __attribute__((weak));
+volatile unsigned lstcs_sles_stats[16];
 static void log_audio_player(const SLDataSource *src, SLuint32 numInterfaces, SLresult result) {
     static uint32_t seen[48];
     static unsigned seen_count = 0;
+    if (result == SL_RESULT_SUCCESS) SLES_STAT_INC(SLES_STAT_PLAYERS_OK);
+    else { SLES_STAT_INC(SLES_STAT_PLAYERS_FAILED); lstcs_sles_stats[SLES_STAT_LAST_FAIL] = result; }
     if (!lstcs_log || !src || !src->pLocator) return;
     SLuint32 loc = *(const SLuint32 *) src->pLocator;
     SLuint32 rate = 0, ch = 0, bits = 0, ftype = src->pFormat ? *(const SLuint32 *) src->pFormat : 0;

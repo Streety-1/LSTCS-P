@@ -34,6 +34,8 @@ set(SO_PATH "${DATA_PATH}libTTapp.so" CACHE STRING "Fallback path to .so")
 # The PC tool injects the game library into the VPK; the loader prefers this copy.
 set(SO_PATH_APP "app0:lib/libTTapp.so" CACHE STRING "Path to .so inside the installed app")
 add_compile_definitions(DATA_PATH="${DATA_PATH}" SO_PATH="${SO_PATH}" SO_PATH_APP="${SO_PATH_APP}")
+set(LSTCS_BUILD "local" CACHE STRING "Build number shown in the log (the CI run number)")
+add_compile_definitions(LSTCS_BUILD="${LSTCS_BUILD}")
 
 option(USE_SCELIBC_IO "Use SceLibcBridge for IO and some other std functions" ON)
 if (USE_SCELIBC_IO)
@@ -101,6 +103,7 @@ add_executable(${CMAKE_PROJECT_NAME}
                source/utils/settings.c
                source/utils/tt_activity.c
                source/utils/utils.c
+               source/utils/debug.c
                lib/falso_jni/ConvertUTF.c
                lib/falso_jni/FalsoJNI.c
                lib/falso_jni/FalsoJNI_ImplBridge.c

@@ -25,6 +25,7 @@
 #include "utils/logger.h"
 #include "utils/settings.h"
 #include "utils/utils.h"
+#include "utils/debug.h"
 
 extern so_module so_mod;
 
@@ -105,6 +106,7 @@ int NuFileOpen_soloader(char *param_1, int param_2) {
     else
         l_warn("NuFileOpen(%s, %d): %d", param_1, param_2, ret);
     lstcs_log("open %s%s", param_1 ? param_1 : "(null)", ret ? "" : "  <-- FAILED");
+    debug_note_file_open(param_1);
 
     return ret;
 }

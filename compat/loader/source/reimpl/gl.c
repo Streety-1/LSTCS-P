@@ -16,6 +16,10 @@
 #include <string.h>
 #include <psp2/kernel/processmgr.h>
 
+#define STB_DXT_STATIC
+#define STB_DXT_IMPLEMENTATION
+#include "stb/stb_dxt.h"
+
 #define PROGRAM_UNIFORM_SPEEDHACK
 //#define SKIP_ERROR_HANDLING
 
@@ -118,6 +122,18 @@ void glBufferSubData_soloader(GLenum target, GLintptr offset, GLsizeiptr size, c
         glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint) prev_cube_); \
     } while (0)
 
+// Logs each new kind of texture the game uploads (once), so formats that vitaGL
+// handles badly show up in the log next to whatever looks wrong on screen.
+static void note_texture_kind(const char *call, GLenum a, GLenum b, GLenum c, GLsizei w, GLsizei h) {
+    static uint32_t seen[64];
+    static unsigned count = 0;
+    const uint32_t key = (a & 0xFFFF) ^ ((b & 0xFFFF) << 8) ^ ((c & 0xFFFF) << 16) ^ (call[2] << 24);
+    for (unsigned i = 0; i < count; i++) if (seen[i] == key) return;
+    if (count >= sizeof(seen) / sizeof(seen[0])) return;
+    seen[count++] = key;
+    lstcs_log("texture kind: %s 0x%04X 0x%04X 0x%04X (first seen at %dx%d)", call, a, b, c, w, h);
+}
+
 void glCompressedTexImage2D_soloader(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height,
                                      GLint border, GLsizei imageSize, const void *data) {
 #ifndef SKIP_ERROR_HANDLING
@@ -133,6 +149,7 @@ void glCompressedTexImage2D_soloader(GLenum target, GLint level, GLenum internal
 
     const size_t i = target == GL_TEXTURE_2D ? 0 : 1;
     const GLuint tex = current_context->textures[current_context->texture * 2 + i];
+    if (level == 0) note_texture_kind("glCompressedTexImage2D", internalformat, 0, 0, width, height);
     if (i == 0)
         glCompressedTextureImage2D(tex, level, internalformat, width, height, border, imageSize, data);
     else
@@ -289,15 +306,13 @@ void glLinkProgram_soloader(GLuint program) {
  * Texture memory: the game ships many textures only uncompressed (their ETC1 versions
  * are missing, so it falls back to raw pixels). On a phone that fits; on the Vita the
  * first level used up every byte of graphics memory. Large power-of-two textures are
- * now stored as DXT, which vitaGL compresses as they're uploaded: DXT5 (with alpha) is
- * a quarter the size of RGBA8888, DXT1 an eighth.
+ * now stored as DXT: DXT5 (with alpha) is a quarter the size of RGBA8888, DXT1 an eighth.
  *
- * Two vitaGL limitations shape this, both of which garbled UI/text in a first attempt:
- *  - Non-power-of-two textures are padded before compressing and then given their
- *    original size, so rows land in the wrong place. Those are left uncompressed.
- *  - Only level 0 is converted to RGBA8888 before compressing; mip levels are passed
- *    through as-is. So every level is converted here first, and mip levels smaller
- *    than a 4x4 DXT block are padded to one.
+ * The compression is done here (with stb_dxt) and handed to vitaGL already compressed,
+ * because vitaGL's own runtime compressor lays blocks out wrongly for non-square
+ * textures, which garbled the UI and text. Non-power-of-two textures are left
+ * uncompressed. Every level is converted to RGBA8888 first, and mip levels smaller
+ * than a 4x4 DXT block are padded to one.
  * A texture's mip levels follow whatever was chosen for its level 0.
  */
 #define TEX_COMPRESS_MIN_PIXELS (128 * 128)
@@ -353,6 +368,23 @@ static uint8_t *to_rgba8888(const uint8_t *src, GLsizei w, GLsizei h, GLsizei aw
     return dst;
 }
 
+// Compresses tightly packed RGBA8888 (aw x ah, both multiples of 4) into DXT blocks in
+// plain row order, the layout glCompressedTexImage2D expects. vitaGL's own runtime
+// compressor walks blocks in Morton order over a max(w,h) square, which scrambles every
+// non-square texture (most of the UI and font sheets), so it is not used.
+static void compress_dxt(uint8_t *dst, const uint8_t *src, GLsizei aw, GLsizei ah, int alpha) {
+    uint8_t block[64];
+    const size_t stride = (size_t) aw * 4;
+    for (GLsizei by = 0; by < ah; by += 4) {
+        for (GLsizei bx = 0; bx < aw; bx += 4) {
+            for (int r = 0; r < 4; r++)
+                memcpy(block + r * 16, src + (size_t) (by + r) * stride + (size_t) bx * 4, 16);
+            stb_compress_dxt_block(dst, block, alpha, STB_DXT_NORMAL);
+            dst += alpha ? 16 : 8;
+        }
+    }
+}
+
 // Uploads a 2D texture level, compressing it to DXT when that's safe. Returns 1 if it
 // handled the upload, 0 if the caller should upload it unchanged.
 static int upload_compressed(GLuint tex, GLint level, GLsizei width, GLsizei height, GLenum format, GLenum type,
@@ -383,25 +415,33 @@ static int upload_compressed(GLuint tex, GLint level, GLsizei width, GLsizei hei
         return 0;
     }
 
+    // Mip levels below 4x4 still occupy one whole DXT block, so they're padded to it.
     const GLsizei aw = (width + 3) & ~3, ah = (height + 3) & ~3;
     const uint8_t *src = pixels;
     uint8_t *conv = NULL;
     if (bpp != 4 || aw != width || ah != height) {
         conv = to_rgba8888(pixels, width, height, aw, ah, type, bpp);
-        if (!conv) {
-            lstcs_tex_stats.stored_bytes += (uint64_t) width * height * bpp;
-            return 0;   // out of memory: fall back to the normal upload
-        }
+        if (!conv) goto fallback;
         src = conv;
     }
+    const GLsizei size = (GLsizei) ((size_t) aw * ah / (alpha ? 1 : 2));
+    uint8_t *blocks = malloc((size_t) size);
+    if (!blocks) { free(conv); goto fallback; }
+
     const uint64_t t0 = sceKernelGetProcessTimeWide();
-    glTextureImage2D(tex, level, alpha ? GL_COMPRESSED_RGBA_S3TC_DXT5_EXT : GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
-                     width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, src);
+    compress_dxt(blocks, src, aw, ah, alpha);
     lstcs_tex_stats.compress_us += sceKernelGetProcessTimeWide() - t0;
     free(conv);
+    glCompressedTextureImage2D(tex, level, alpha ? GL_COMPRESSED_RGBA_S3TC_DXT5_EXT : GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
+                               level ? aw : width, level ? ah : height, 0, size, blocks);
+    free(blocks);
     lstcs_tex_stats.compressed++;
-    lstcs_tex_stats.stored_bytes += (uint64_t) aw * ah / (alpha ? 1 : 2);
+    lstcs_tex_stats.stored_bytes += (uint64_t) size;
     return 1;
+
+fallback:   // out of memory: upload unchanged
+    lstcs_tex_stats.stored_bytes += (uint64_t) width * height * bpp;
+    return 0;
 }
 
 void glTexImage2D_soloader(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height,
@@ -419,6 +459,7 @@ void glTexImage2D_soloader(GLenum target, GLint level, GLint internalformat, GLs
 
     const size_t i = target == GL_TEXTURE_2D ? 0 : 1;
     const GLuint tex = current_context->textures[current_context->texture * 2 + i];
+    if (level == 0) note_texture_kind("glTexImage2D", internalformat, format, type, width, height);
     if (i == 0) {
         if (!upload_compressed(tex, level, width, height, format, type, pixels))
             glTextureImage2D(tex, level, internalformat, width, height, border, format, type, pixels);

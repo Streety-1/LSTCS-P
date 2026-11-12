@@ -120,6 +120,7 @@ SLresult IBufferQueue_Enqueue(SLBufferQueueItf self, const void *pBuffer, SLuint
         }
         if (newRear == this->mFront) {
             result = SL_RESULT_BUFFER_INSUFFICIENT;
+            SLES_STAT_INC(SLES_STAT_DROPPED);
             {
                 extern void lstcs_log(const char *fmt, ...) __attribute__((weak));
                 static unsigned rejected = 0;
@@ -127,6 +128,7 @@ SLresult IBufferQueue_Enqueue(SLBufferQueueItf self, const void *pBuffer, SLuint
                     lstcs_log("Audio: buffer queue full, a sound buffer was dropped (%u so far)", rejected);
             }
         } else {
+            SLES_STAT_INC(SLES_STAT_ENQUEUED);
             const SLuint32 outRate = (SLuint32) (&_opensles_user_freq!=NULL?_opensles_user_freq:44100) * 1000;
             const int bps = this->bps == 8 ? 8 : 16;
             const int channels = this->channels == 1 ? 1 : 2;

@@ -4,6 +4,7 @@
 #include "utils/logger.h"
 #include "utils/tt_activity.h"
 #include "utils/utils.h"
+#include "utils/debug.h"
 
 #include "reimpl/keycodes.h"
 #include "reimpl/egl.h"
@@ -71,6 +72,8 @@ void controls_init() {
 
 #define BIT_TO_FLOAT(flags, bit) ((flags & bit) == bit ? 1.0f : 0.0f)
 
+static volatile uint32_t current_buttons = 0;
+
 void poll_pad() {
     static uint32_t old_buttons = 0;
     static SceCtrlData pad;
@@ -99,6 +102,7 @@ void poll_pad() {
     activity.nativeUpdateGamepadAxisValues(&jni, ACTIVITY_CLASS, hatX, hatY, lX, lY, rX, rY);
 
     old_buttons = pad.buttons;
+    current_buttons = pad.buttons;
 }
 
 void poll_touch() {
@@ -172,6 +176,7 @@ void *controls_thread() {
         poll_touch();
         poll_pad();
         sceKernelDelayThread((1 * 1000 * 1000) / 120);
+        debug_tick(current_buttons, lstcs_frames);
 
         // Every ~5 s, note how many frames were drawn: frames rising on a black screen
         // means it's rendering (or loading with a black screen); flat means it's stuck.
@@ -187,6 +192,10 @@ void *controls_thread() {
                       lstcs_tex_stats.uploads, lstcs_tex_stats.compressed, lstcs_tex_stats.npot, lstcs_tex_stats.other_format,
                       (unsigned) (lstcs_tex_stats.raw_bytes >> 20), (unsigned) (lstcs_tex_stats.stored_bytes >> 20),
                       (unsigned) (lstcs_tex_stats.compress_us / 1000), (unsigned) (mi.uordblks >> 20));
+            extern volatile unsigned lstcs_sles_stats[16];
+            const volatile unsigned *a = lstcs_sles_stats;
+            lstcs_log("  audio: %u players created, %u failed (last error %u), %u buffers queued, %u dropped (queue full), %u refused (all mixer tracks busy), %u refused (object limit), %u play calls",
+                      a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
             last_frames = f;
         }
     }

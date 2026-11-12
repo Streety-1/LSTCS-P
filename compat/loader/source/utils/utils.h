@@ -70,6 +70,8 @@ const char * data_path(void);
 /// Appends one line to <data path>/lstcs-log.txt (recreated at every launch), so
 /// problems can be diagnosed from a text file instead of crash dumps.
 void lstcs_log(const char * fmt, ...);
+// Where the log file goes (a folder ending in "/"); lines before this are held back.
+void lstcs_log_set_path(const char * dir);
 
 /**
  * Load file contents into memory.

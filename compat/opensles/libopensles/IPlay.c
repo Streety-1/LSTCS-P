@@ -32,6 +32,7 @@ static SLresult IPlay_SetPlayState(SLPlayItf self, SLuint32 state)
         {
         IPlay *this = (IPlay *) self;
         unsigned attr = ATTR_NONE;
+        if (state == SL_PLAYSTATE_PLAYING) SLES_STAT_INC(SLES_STAT_PLAY_CALLS);
         result = SL_RESULT_SUCCESS;
         CAudioPlayer *audioPlayer = (SL_OBJECTID_AUDIOPLAYER == InterfaceToObjectID(this)) ?
             (CAudioPlayer *) this->mThis : NULL;

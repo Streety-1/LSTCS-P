@@ -1009,6 +1009,7 @@ IObject *construct(const ClassTable *class__, unsigned exposedMask, SLEngineItf 
             interface_lock_exclusive(thisEngine);
             if (MAX_INSTANCE <= thisEngine->mInstanceCount) {
                 SL_LOGE("Too many objects");
+                SLES_STAT_INC(SLES_STAT_OBJECTS_FULL);
                 { extern void lstcs_log(const char *fmt, ...) __attribute__((weak));
                   if (lstcs_log) lstcs_log("Audio: object limit (%d) reached, a sound could not be created", MAX_INSTANCE); }
                 interface_unlock_exclusive(thisEngine);

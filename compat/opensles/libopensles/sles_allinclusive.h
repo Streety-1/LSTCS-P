@@ -1361,3 +1361,10 @@ extern void ReleaseStrongRefAndUnlockExclusive(IObject *object);
 extern COutputMix *CAudioPlayer_GetOutputMix(CAudioPlayer *audioPlayer);
 
 extern int _opensles_user_freq __attribute__((weak));
+
+/* LSTCS-P: activity counters, read by the loader's heartbeat in lstcs-log.txt */
+enum { SLES_STAT_PLAYERS_OK, SLES_STAT_PLAYERS_FAILED, SLES_STAT_LAST_FAIL, SLES_STAT_ENQUEUED,
+       SLES_STAT_DROPPED, SLES_STAT_TRACKS_FULL, SLES_STAT_OBJECTS_FULL, SLES_STAT_PLAY_CALLS,
+       SLES_STAT_COUNT };
+extern volatile unsigned lstcs_sles_stats[16];
+#define SLES_STAT_INC(i) __atomic_add_fetch(&lstcs_sles_stats[i], 1, __ATOMIC_RELAXED)

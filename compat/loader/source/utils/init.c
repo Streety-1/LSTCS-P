@@ -16,6 +16,7 @@
 #include "utils/settings.h"
 #include "utils/tt_activity.h"
 #include "utils/utils.h"
+#include "utils/debug.h"
 
 #include <string.h>
 
@@ -54,6 +55,11 @@ void soloader_init_all() {
     scePowerSetGpuXbarClockFrequency(166);
 
     data_path_init();
+    debug_init();
+#ifndef LSTCS_BUILD
+#define LSTCS_BUILD "local"
+#endif
+    lstcs_log("LSTCS-P build %s (%s %s)", LSTCS_BUILD, __DATE__, __TIME__);
 
 #ifdef USE_SCELIBC_IO
     if (fios_init(data_path()) == 0)

@@ -567,14 +567,29 @@ const char * data_path(void) {
 
 static SceKernelLwMutexWork g_log_mutex;
 static int g_log_ready = 0;
+static char g_log_dir[96];
+// Lines logged before the game folder is known are held here, then written first.
+static char g_early[4096];
+static size_t g_early_len = 0;
+
+static void log_init_mutex(void) {
+    if (!g_log_ready && sceKernelCreateLwMutex(&g_log_mutex, "lstcs_log", 0, 0, NULL) >= 0)
+        g_log_ready = 1;
+}
+
+void lstcs_log_set_path(const char * dir) {
+    log_init_mutex();
+    if (!g_log_ready) return;
+    sceKernelLockLwMutex(&g_log_mutex, 1, NULL);
+    snprintf(g_log_dir, sizeof(g_log_dir), "%s", dir);
+    sceKernelUnlockLwMutex(&g_log_mutex, 1);
+}
 
 void lstcs_log(const char * fmt, ...) {
     static SceUID fd = -1;
     static int failed = 0;
-    if (!g_log_ready) {
-        if (sceKernelCreateLwMutex(&g_log_mutex, "lstcs_log", 0, 0, NULL) < 0) return;
-        g_log_ready = 1;
-    }
+    log_init_mutex();
+    if (!g_log_ready) return;
     char line[512];
     uint64_t us = sceKernelGetProcessTimeWide();
     int n = snprintf(line, sizeof(line), "[%4u.%02u] ", (unsigned) (us / 1000000), (unsigned) ((us / 10000) % 100));
@@ -588,16 +603,24 @@ void lstcs_log(const char * fmt, ...) {
     line[n++] = '\n';
 
     sceKernelLockLwMutex(&g_log_mutex, 1, NULL);
-    if (fd < 0 && !failed) {
-        // Recreated at every launch; kept open so logging stays cheap. Each write goes
-        // straight to the card, so the log survives a crash.
-        char path[128];
-        snprintf(path, sizeof(path), "%slstcs-log.txt", data_path());
-        fd = sceIoOpen(path, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
-        if (fd < 0) failed = 1;
+    if (!g_log_dir[0]) {
+        if (g_early_len + n <= sizeof(g_early)) {
+            memcpy(g_early + g_early_len, line, n);
+            g_early_len += n;
+        }
+    } else {
+        if (fd < 0 && !failed) {
+            // Recreated at every launch; kept open so logging stays cheap. Each write goes
+            // straight to the card, so the log survives a crash.
+            char path[160];
+            snprintf(path, sizeof(path), "%slstcs-log.txt", g_log_dir);
+            fd = sceIoOpen(path, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
+            if (fd < 0) failed = 1;
+            else if (g_early_len) sceIoWrite(fd, g_early, g_early_len);
+        }
+        if (fd >= 0)
+            sceIoWrite(fd, line, n);
     }
-    if (fd >= 0)
-        sceIoWrite(fd, line, n);
     sceKernelUnlockLwMutex(&g_log_mutex, 1);
 }
 
