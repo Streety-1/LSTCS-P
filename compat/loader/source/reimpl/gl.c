@@ -13,6 +13,7 @@
 
 #include <psp2/kernel/clib.h>
 #include <stdlib.h>
+#include <string.h>
 #include <psp2/kernel/processmgr.h>
 
 #define PROGRAM_UNIFORM_SPEEDHACK
@@ -248,7 +249,31 @@ GLint glGetUniformLocation_soloader(GLuint program, const GLchar *name) {
                   program, name, (void *) original, mapped);
     return mapped;
 #else
-    return find_uniform(program, glGetUniformLocation(program, name));
+    // GL drivers accept "name[0]" for the start of an array uniform; vitaGL only knows
+    // the bare name, so strip a trailing "[0]". Anything vitaGL still can't find is
+    // logged once, since a missing uniform leaves objects distorted or invisible.
+    char base[96];
+    const char *lookup = name;
+    size_t n = name ? strlen(name) : 0;
+    if (n > 3 && n < sizeof(base) && strcmp(name + n - 3, "[0]") == 0) {
+        memcpy(base, name, n - 3);
+        base[n - 3] = '\0';
+        lookup = base;
+    }
+    GLint loc = glGetUniformLocation(program, lookup);
+    if (loc == -1 && name) {
+        static uint32_t seen[64];
+        static unsigned seen_count = 0;
+        uint32_t h = 2166136261u;
+        for (const char *c = name; *c; c++) h = (h ^ (uint8_t) *c) * 16777619u;
+        int known = 0;
+        for (unsigned k = 0; k < seen_count; k++) if (seen[k] == h) { known = 1; break; }
+        if (!known && seen_count < 64) {
+            seen[seen_count++] = h;
+            lstcs_log("GL: uniform \"%s\" not found in program %u", name, program);
+        }
+    }
+    return find_uniform(program, loc);
 #endif
 }
 

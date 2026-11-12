@@ -120,6 +120,12 @@ SLresult IBufferQueue_Enqueue(SLBufferQueueItf self, const void *pBuffer, SLuint
         }
         if (newRear == this->mFront) {
             result = SL_RESULT_BUFFER_INSUFFICIENT;
+            {
+                extern void lstcs_log(const char *fmt, ...) __attribute__((weak));
+                static unsigned rejected = 0;
+                if (lstcs_log && (++rejected <= 5 || (rejected % 200) == 0))
+                    lstcs_log("Audio: buffer queue full, a sound buffer was dropped (%u so far)", rejected);
+            }
         } else {
             const SLuint32 outRate = (SLuint32) (&_opensles_user_freq!=NULL?_opensles_user_freq:44100) * 1000;
             const int bps = this->bps == 8 ? 8 : 16;

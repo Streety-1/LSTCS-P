@@ -8,6 +8,7 @@
 
 #include "reimpl/egl.h"
 #include "reimpl/gl_lock.h"
+#include "utils/utils.h"
 
 #include "utils/glutil.h"
 #include "utils/logger.h"
@@ -377,6 +378,22 @@ volatile unsigned int lstcs_frames = 0;
 EGLBoolean eglSwapBuffers_soloader(EGLDisplay dpy, EGLSurface surface) {
     lstcs_frames++;
     gl_lock();
+    // Report each distinct GL error the first few times it shows up: draws or uploads
+    // that vitaGL rejects are a common cause of missing objects or textures.
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR) {
+        static GLenum seen[8];
+        static unsigned seen_count = 0, total = 0;
+        int known = 0;
+        for (unsigned k = 0; k < seen_count; k++) if (seen[k] == err) { known = 1; break; }
+        total++;
+        if (!known && seen_count < 8) {
+            seen[seen_count++] = err;
+            lstcs_log("GL: error 0x%04X first seen at frame %u", err, lstcs_frames);
+        } else if ((total % 1000) == 0) {
+            lstcs_log("GL: %u frames with a GL error so far (latest 0x%04X)", total, err);
+        }
+    }
     EGLBoolean ret = eglSwapBuffers(dpy, surface);
     gl_unlock();
     return ret;

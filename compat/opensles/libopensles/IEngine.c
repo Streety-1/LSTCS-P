@@ -99,6 +99,28 @@ IObject *players[20] = {};
 int idx = 0;
 #endif
 
+// LSTCS-P: records each distinct kind of audio player the game creates (format and
+// whether creation worked) in lstcs-log.txt, to track down sounds that stay silent.
+extern void lstcs_log(const char *fmt, ...) __attribute__((weak));
+static void log_audio_player(const SLDataSource *src, SLuint32 numInterfaces, SLresult result) {
+    static uint32_t seen[48];
+    static unsigned seen_count = 0;
+    if (!lstcs_log || !src || !src->pLocator) return;
+    SLuint32 loc = *(const SLuint32 *) src->pLocator;
+    SLuint32 rate = 0, ch = 0, bits = 0, ftype = src->pFormat ? *(const SLuint32 *) src->pFormat : 0;
+    if (ftype == SL_DATAFORMAT_PCM) {
+        const SLDataFormat_PCM *pcm = (const SLDataFormat_PCM *) src->pFormat;
+        rate = pcm->samplesPerSec / 1000; ch = pcm->numChannels; bits = pcm->bitsPerSample;
+    }
+    uint32_t key = (loc & 0xF) | ((ftype & 0xF) << 4) | ((ch & 0xF) << 8) | ((bits & 0x3F) << 12) |
+                   ((rate / 1000) << 18) | ((result != SL_RESULT_SUCCESS) << 31);
+    for (unsigned i = 0; i < seen_count; i++) if (seen[i] == key) return;
+    if (seen_count < sizeof(seen) / sizeof(seen[0])) seen[seen_count++] = key;
+    lstcs_log("Audio: player %s - locator %u, format %u, %u Hz, %u ch, %u bit, %u interfaces (result %u)",
+              result == SL_RESULT_SUCCESS ? "created" : "FAILED", (unsigned) loc, (unsigned) ftype,
+              (unsigned) rate, (unsigned) ch, (unsigned) bits, (unsigned) numInterfaces, (unsigned) result);
+}
+
 static SLresult IEngine_CreateAudioPlayer(SLEngineItf self, SLObjectItf *pPlayer,
     SLDataSource *pAudioSrc, SLDataSink *pAudioSnk, SLuint32 numInterfaces,
     const SLInterfaceID *pInterfaceIds, const SLboolean *pInterfaceRequired)
@@ -271,6 +293,7 @@ static SLresult IEngine_CreateAudioPlayer(SLEngineItf self, SLObjectItf *pPlayer
 
     }
 
+    log_audio_player(pAudioSrc, numInterfaces, result);
     SL_LEAVE_INTERFACE
 }
 
