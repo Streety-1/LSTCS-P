@@ -52,7 +52,7 @@ else()
 endif()
 
 set(valid_dump_formats GLSL CG)
-option(DUMP_COMPILED_SHADERS "When using GLSL or CG shader format, cache compiled shaders on disk" OFF)
+option(DUMP_COMPILED_SHADERS "When using GLSL or CG shader format, cache compiled shaders on disk" ON)
 if (DUMP_COMPILED_SHADERS)
   if (SHADER_FORMAT IN_LIST valid_dump_formats)
     add_compile_definitions(DUMP_COMPILED_SHADERS)
@@ -166,9 +166,9 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 vita_create_self(eboot.bin ${CMAKE_PROJECT_NAME} UNSAFE NOASLR)
 # LSTCS-P: precompiled .gxp shaders need Sony's psp2cgc and can't be
 # produced by the public build, so by default shaders ship as .cg (copied to
-# ux0:data/lswtcs/cg by the PC builder), compile on the Vita via libshacccg and are
-# Caching compiled shaders is off: with current vitaGL a shader can report success
-# before its program exists, and exporting it crashed the game during loading.
+# ux0:data/lswtcs/cg by the PC builder) and compile on the Vita via libshacccg.
+# Compiled shaders are cached in data/lswtcs/gxp after first use (glutil.c), so each
+# shader is only compiled once ever; later loads read the cached binary instead.
 set(VPK_SHADER_FILES "")
 if (${SHADER_FORMAT} STREQUAL "GXP")
   set(VPK_SHADER_FILES ${CMAKE_SOURCE_DIR}/shaders/gxp gxp)

@@ -563,35 +563,41 @@ const char * data_path(void) {
 #include <stdarg.h>
 #include <psp2/io/fcntl.h>
 #include <psp2/kernel/threadmgr.h>
+#include <psp2/kernel/processmgr.h>
 
 static SceKernelLwMutexWork g_log_mutex;
 static int g_log_ready = 0;
 
 void lstcs_log(const char * fmt, ...) {
-    static int started = 0;
+    static SceUID fd = -1;
+    static int failed = 0;
     if (!g_log_ready) {
         if (sceKernelCreateLwMutex(&g_log_mutex, "lstcs_log", 0, 0, NULL) < 0) return;
         g_log_ready = 1;
     }
     char line[512];
+    uint64_t us = sceKernelGetProcessTimeWide();
+    int n = snprintf(line, sizeof(line), "[%4u.%02u] ", (unsigned) (us / 1000000), (unsigned) ((us / 10000) % 100));
     va_list args;
     va_start(args, fmt);
-    int n = vsnprintf(line, sizeof(line) - 2, fmt, args);
+    int m = vsnprintf(line + n, sizeof(line) - n - 2, fmt, args);
     va_end(args);
-    if (n < 0) return;
+    if (m < 0) return;
+    n += m;
     if (n > (int) sizeof(line) - 2) n = sizeof(line) - 2;
     line[n++] = '\n';
 
-    char path[128];
-    snprintf(path, sizeof(path), "%slstcs-log.txt", data_path());
     sceKernelLockLwMutex(&g_log_mutex, 1, NULL);
-    int flags = SCE_O_WRONLY | SCE_O_CREAT | (started ? SCE_O_APPEND : SCE_O_TRUNC);
-    SceUID fd = sceIoOpen(path, flags, 0666);
-    if (fd >= 0) {
-        sceIoWrite(fd, line, n);
-        sceIoClose(fd);
-        started = 1;
+    if (fd < 0 && !failed) {
+        // Recreated at every launch; kept open so logging stays cheap. Each write goes
+        // straight to the card, so the log survives a crash.
+        char path[128];
+        snprintf(path, sizeof(path), "%slstcs-log.txt", data_path());
+        fd = sceIoOpen(path, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
+        if (fd < 0) failed = 1;
     }
+    if (fd >= 0)
+        sceIoWrite(fd, line, n);
     sceKernelUnlockLwMutex(&g_log_mutex, 1);
 }
 

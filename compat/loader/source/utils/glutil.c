@@ -91,15 +91,24 @@ void glCompileShader_soloader(GLuint shader) {
 #endif
         }
 #ifdef DUMP_COMPILED_SHADERS
-        // Cache the compiled shader, but only when it compiled and we know which
-        // real shader it is.
+        // Cache the compiled shader, but only when it really compiled (shaders are created
+        // as Cg, so a program exists right after glCompileShader) and we know which real
+        // shader it is. Written to a temp file and renamed, so a power-off mid-write can
+        // never leave a half-written cache file that would be loaded next time.
         if (compiled == GL_TRUE && next_shader_fname[0] != '\0') {
-            void *bin = vglMalloc(32 * 1024);
+            const GLsizei cap = 256 * 1024;   // vitaGL writes without a size check
+            void *bin = vglMalloc(cap);
             GLsizei len = 0;
-            vglGetShaderBinary(shader, 32 * 1024, &len, bin);
-            if (len > 0 && file_mkpath(next_shader_fname, 0777))
-                file_save(next_shader_fname, bin, len);
-            vglFree(bin);
+            if (bin) {
+                vglGetShaderBinary(shader, cap, &len, bin);
+                if (len > 0 && len <= cap && file_mkpath(next_shader_fname, 0777)) {
+                    char tmp[272];
+                    snprintf(tmp, sizeof(tmp), "%s.tmp", next_shader_fname);
+                    if (file_save(tmp, bin, len))
+                        rename(tmp, next_shader_fname);
+                }
+                vglFree(bin);
+            }
         }
         next_shader_fname[0] = '\0';
 #endif

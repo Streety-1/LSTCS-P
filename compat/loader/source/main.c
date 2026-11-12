@@ -6,6 +6,7 @@
 #include "utils/utils.h"
 
 #include "reimpl/keycodes.h"
+#include "reimpl/egl.h"
 
 #include <stdlib.h>
 
@@ -163,10 +164,20 @@ void *controls_thread() {
     // Move to 4th core if available
     sceKernelChangeThreadCpuAffinityMask(sceKernelGetThreadId(), SCE_KERNEL_CPU_MASK_SYSTEM);
 
+    unsigned int ticks = 0, last_frames = 0;
     while (1) {
         poll_touch();
         poll_pad();
         sceKernelDelayThread((1 * 1000 * 1000) / 120);
+
+        // Every ~5 s, note how many frames were drawn: frames rising on a black screen
+        // means it's rendering (or loading with a black screen); flat means it's stuck.
+        if (++ticks >= 600) {
+            ticks = 0;
+            unsigned int f = lstcs_frames;
+            lstcs_log("heartbeat: %u frames total, %u in the last ~5s", f, f - last_frames);
+            last_frames = f;
+        }
     }
 
     sceKernelExitDeleteThread(0);

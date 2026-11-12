@@ -93,9 +93,10 @@ void *_ZN8NuThread10ThreadMainEPv_soloader(void *param_1) {
     return SO_CONTINUE(void*, _ZN8NuThread10ThreadMainEPv_hook, param_1);
 }
 
-#ifdef DEBUG
 so_hook NuFileOpen_hook;
 
+// Logs every game file opened (and failures) to lstcs-log.txt, so a hang or black
+// screen shows what the game was loading when it stopped.
 int NuFileOpen_soloader(char *param_1, int param_2) {
     int ret = SO_CONTINUE(int, NuFileOpen_hook, param_1, param_2);
 
@@ -103,10 +104,10 @@ int NuFileOpen_soloader(char *param_1, int param_2) {
         l_debug("NuFileOpen(%s, %d): %d", param_1, param_2, ret);
     else
         l_warn("NuFileOpen(%s, %d): %d", param_1, param_2, ret);
+    lstcs_log("open %s%s", param_1 ? param_1 : "(null)", ret ? "" : "  <-- FAILED");
 
     return ret;
 }
-#endif
 
 void so_patch(void) {
     _Z11AndroidMainPv_hook = hook_addr((uintptr_t) so_symbol(&so_mod, "_Z11AndroidMainPv"),
@@ -124,7 +125,6 @@ void so_patch(void) {
     _ZN8NuThread10ThreadMainEPv_hook = hook_addr((uintptr_t) so_symbol(&so_mod, "_ZN8NuThread10ThreadMainEPv"),
                                                  (uintptr_t) &_ZN8NuThread10ThreadMainEPv_soloader);
 
-#ifdef DEBUG
-    NuFileOpen_hook = hook_addr((uintptr_t) so_symbol(&so_mod, "NuFileOpen"), (uintptr_t) &NuFileOpen_soloader);
-#endif
+    if (so_symbol(&so_mod, "NuFileOpen"))
+        NuFileOpen_hook = hook_addr((uintptr_t) so_symbol(&so_mod, "NuFileOpen"), (uintptr_t) &NuFileOpen_soloader);
 }

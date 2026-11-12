@@ -306,7 +306,7 @@ so_default_dynlib default_dynlib[] = {
         { "eglInitialize", (uintptr_t)&eglInitialize_soloader },
         { "eglMakeCurrent", (uintptr_t)&eglMakeCurrent_soloader },
         { "eglQuerySurface", (uintptr_t)&eglQuerySurface_soloader },
-        { "eglSwapBuffers", (uintptr_t)&eglSwapBuffers },
+        { "eglSwapBuffers", (uintptr_t)&eglSwapBuffers_soloader },
 
 
         // OpenGL

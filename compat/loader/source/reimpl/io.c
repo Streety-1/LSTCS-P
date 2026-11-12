@@ -66,16 +66,6 @@ const char *fix_path(const char *filename) {
     return filename;
 }
 
-// The four .dat archives hold almost all game data and are read in many small
-// chunks. Giving them a large stdio buffer cuts the number of trips to the
-// memory card, which is the main cost behind slow load screens.
-#define DAT_STREAM_BUFFER_SIZE (256 * 1024)
-
-static int is_dat_archive(const char *path) {
-    size_t len = strlen(path);
-    return len > 4 && strcmp(path + len - 4, ".dat") == 0 && strncmp(path, data_path(), strlen(data_path())) == 0;
-}
-
 FILE * fopen_soloader(const char * filename, const char * mode) {
     const char* p = fix_path(filename);
 
@@ -85,17 +75,6 @@ FILE * fopen_soloader(const char * filename, const char * mode) {
     FILE* ret = fopen(p, mode);
 #endif
 
-    if (ret && mode[0] == 'r' && strchr(mode, '+') == NULL && is_dat_archive(p)) {
-        // Buffer is intentionally never freed: the archives stay open for the whole session.
-        char *vbuf = malloc(DAT_STREAM_BUFFER_SIZE);
-        if (vbuf) {
-#ifdef USE_SCELIBC_IO
-            if (sceLibcBridge_setvbuf(ret, vbuf, _IOFBF, DAT_STREAM_BUFFER_SIZE) != 0) free(vbuf);
-#else
-            if (setvbuf(ret, vbuf, _IOFBF, DAT_STREAM_BUFFER_SIZE) != 0) free(vbuf);
-#endif
-        }
-    }
 
     if (ret)
         l_debug("fopen(%s => %s, %s): %p", filename, p, mode, ret);

@@ -369,3 +369,11 @@ EGLBoolean eglGetConfigs_soloader(EGLDisplay display, EGLConfig * configs,
 
     return EGL_TRUE;
 }
+
+// Counts presented frames (for the heartbeat in lstcs-log.txt).
+volatile unsigned int lstcs_frames = 0;
+
+EGLBoolean eglSwapBuffers_soloader(EGLDisplay dpy, EGLSurface surface) {
+    lstcs_frames++;
+    return eglSwapBuffers(dpy, surface);
+}

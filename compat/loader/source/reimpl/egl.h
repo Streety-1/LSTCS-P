@@ -23,6 +23,8 @@ extern "C" {
 #endif
 
 EGLBoolean eglInitialize_soloader(EGLDisplay dpy, EGLint *major, EGLint *minor);
+EGLBoolean eglSwapBuffers_soloader(EGLDisplay dpy, EGLSurface surface);
+extern volatile unsigned int lstcs_frames;
 
 EGLBoolean eglGetConfigAttrib_soloader(EGLDisplay display, EGLConfig config,
                               EGLint attribute, EGLint *value);

@@ -22,6 +22,11 @@
 /** \brief Called by SDL to fill the next audio output buffer */
 IEngine *slEngine;
 
+// The loader provides this (writes to data/lswtcs/lstcs-log.txt); weak so the
+// library still links on its own.
+extern void lstcs_log(const char *fmt, ...) __attribute__((weak));
+#define AUDIO_LOG(...) do { if (lstcs_log) lstcs_log(__VA_ARGS__); } while (0)
+
 uint8_t audio_buffers[SndFile_NUMBUFS][SndFile_BUFSIZE];
 #ifdef HAVE_PTHREAD
 static void audioThread(void* arg) {
@@ -33,9 +38,11 @@ static int audioThread(unsigned int args, void* arg) {
 		// LSTCS-P: the original ignored this and then fed audio to an
 		// invalid port forever. Retry once on the MAIN port before giving up quietly.
 		sceClibPrintf("OpenSLES: BGM port open failed (0x%08X), trying MAIN\n", ch);
+		AUDIO_LOG("Audio: BGM port open failed (0x%08X), trying MAIN", ch);
 		ch = sceAudioOutOpenPort(SCE_AUDIO_OUT_PORT_TYPE_MAIN, SndFile_BUFSIZE / 4, &_opensles_user_freq != NULL ? _opensles_user_freq : 44100, SCE_AUDIO_OUT_MODE_STEREO);
 		if (ch < 0) {
 			sceClibPrintf("OpenSLES: no audio port available (0x%08X), audio disabled\n", ch);
+			AUDIO_LOG("Audio: no audio port available (0x%08X), audio disabled", ch);
 #ifdef HAVE_PTHREAD
 			return;
 #else
@@ -44,6 +51,7 @@ static int audioThread(unsigned int args, void* arg) {
 		}
 	}
 	sceAudioOutSetConfig(ch, -1, -1, (SceAudioOutMode)-1);
+	AUDIO_LOG("Audio: output port %d open, %d Hz", ch, &_opensles_user_freq != NULL ? _opensles_user_freq : 44100);
 	
 	int vol_stereo[] = {32767, 32767};
 	sceAudioOutSetVolume(ch, (SceAudioOutChannelFlag)(SCE_AUDIO_VOLUME_FLAG_L_CH | SCE_AUDIO_VOLUME_FLAG_R_CH), vol_stereo);
@@ -81,11 +89,20 @@ void SDL_open(IEngine *thisEngine)
 	pthread_t thd;
 	pthread_create(&thd, NULL, (void *(*)(void *)) audioThread, NULL);
 #else
-	// LSTCS-P: high priority (lower number = higher) so the mixer is never
-	// starved by the game's loading and render threads, which caused crackle and gaps.
-	// Kept on the "system" core, away from the game's three pinned threads.
-	SceUID thd = sceKernelCreateThread("OpenSLES Playback", &audioThread, 64, 0x10000, 0, SCE_KERNEL_CPU_MASK_SYSTEM, NULL);
-	sceKernelStartThread(thd, 0, NULL);
+	// LSTCS-P: high priority (64 = highest for apps) so the mixer isn't starved by the
+	// game's loading and render threads. Any core: apps can't normally pin threads to
+	// the system core, and asking for it made thread creation fail (no audio at all).
+	SceUID thd = sceKernelCreateThread("OpenSLES Playback", &audioThread, 64, 0x10000, 0, 0, NULL);
+	if (thd < 0) {
+		AUDIO_LOG("Audio: high-priority thread failed (0x%08X), using default priority", thd);
+		thd = sceKernelCreateThread("OpenSLES Playback", &audioThread, 0x10000100, 0x10000, 0, 0, NULL);
+	}
+	if (thd < 0) {
+		AUDIO_LOG("Audio: could not create the audio thread (0x%08X)", thd);
+		return;
+	}
+	int started = sceKernelStartThread(thd, 0, NULL);
+	AUDIO_LOG("Audio: mixer thread started (%s)", started >= 0 ? "ok" : "FAILED");
 #endif
 }
 
