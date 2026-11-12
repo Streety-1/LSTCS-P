@@ -40,7 +40,7 @@ static SLresult I3DGrouping_Set3DGroup(SL3DGroupingItf self, SLObjectItf group)
         assert(0 != id);        // player object must be published by this point
         --id;
         assert(MAX_INSTANCE > id);
-        unsigned mask = 1 << id;
+        uint64_t mask = BIT64(id);
         interface_lock_exclusive(this);
         C3DGroup *oldGroup = this->mGroup;
         if (newGroup != oldGroup) {
@@ -108,7 +108,7 @@ void I3DGrouping_deinit(void *self)
     I3DGrouping *this = (I3DGrouping *) self;
     C3DGroup *group = this->mGroup;
     if (NULL != group) {
-        unsigned mask = 1 << (InterfaceToIObject(this)->mInstanceID - 1);
+        uint64_t mask = BIT64(InterfaceToIObject(this)->mInstanceID - 1);
         IObject *groupObject = &group->mObject;
         object_lock_exclusive(groupObject);
         assert(group->mMemberMask & mask);

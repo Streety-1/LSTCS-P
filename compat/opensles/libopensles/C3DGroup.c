@@ -28,6 +28,6 @@ bool C3DGroup_PreDestroy(void *self)
     if (0 == this->mMemberMask) {
         return true;
     }
-    SL_LOGE("Object::Destroy(%p) for 3DGroup ignored; mMemberMask=0x%x", this, this->mMemberMask);
+    SL_LOGE("Object::Destroy(%p) for 3DGroup ignored; mMemberMask=0x%llx", this, (unsigned long long) this->mMemberMask);
     return false;
 }

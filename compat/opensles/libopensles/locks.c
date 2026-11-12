@@ -219,7 +219,7 @@ void object_unlock_exclusive_attributes(IObject *this, unsigned attributes)
             assert(MAX_INSTANCE > id);
             IEngine *thisEngine = this->mEngine;
             interface_lock_exclusive(thisEngine);
-            thisEngine->mChangedMask |= 1 << id;
+            thisEngine->mChangedMask |= BIT64(id);
             interface_unlock_exclusive(thisEngine);
         }
     }

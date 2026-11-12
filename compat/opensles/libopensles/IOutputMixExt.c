@@ -86,7 +86,7 @@ static SLboolean track_check(Track *track)
             COutputMix *outputMix = CAudioPlayer_GetOutputMix(audioPlayer);
             unsigned i = track - outputMix->mOutputMixExt.mTracks;
             assert( /* 0 <= i && */ i < MAX_TRACK);
-            unsigned mask = 1 << i;
+            uint64_t mask = BIT64(i);
             track->mAudioPlayer = NULL;
             assert(outputMix->mOutputMixExt.mActiveMask & mask);
             outputMix->mOutputMixExt.mActiveMask &= ~mask;
@@ -180,7 +180,7 @@ void IOutputMixExt_FillBuffer(SLOutputMixExtItf self, void *pBuffer, SLuint32 si
     IObject *thisObject = this->mThis;
     // This lock should never block, except when the application destroys the output mix object
     object_lock_exclusive(thisObject);
-    unsigned activeMask;
+    uint64_t activeMask;
     // If the output mix is marked for destruction, then acknowledge the request
     if (this->mDestroyRequested) {
         IEngine *thisEngine = thisObject->mEngine;
@@ -197,9 +197,9 @@ void IOutputMixExt_FillBuffer(SLOutputMixExtItf self, void *pBuffer, SLuint32 si
         activeMask = this->mActiveMask;
     }
     while (activeMask) {
-        unsigned i = ctz(activeMask);
+        unsigned i = ctz64(activeMask);
         assert(MAX_TRACK > i);
-        activeMask &= ~(1 << i);
+        activeMask &= ~BIT64(i);
         Track *track = &this->mTracks[i];
 
         // track is allocated
@@ -391,15 +391,17 @@ SLresult IOutputMixExt_checkAudioPlayerSourceSink(CAudioPlayer *this)
             pAudioSnk->pLocator)->outputMix)->mOutputMixExt;
         // allocate an entry within OutputMix for this track
         interface_lock_exclusive(omExt);
-        unsigned availMask = ~omExt->mActiveMask;
+        uint64_t availMask = ~omExt->mActiveMask;
         if (!availMask) {
             interface_unlock_exclusive(omExt);
             // All track slots full in output mix
+            { extern void lstcs_log(const char *fmt, ...) __attribute__((weak));
+              if (lstcs_log) lstcs_log("Audio: all %d mixer tracks in use, a sound could not be played", MAX_TRACK); }
             return SL_RESULT_MEMORY_FAILURE;
         }
-        unsigned i = ctz(availMask);
+        unsigned i = ctz64(availMask);
         assert(MAX_TRACK > i);
-        omExt->mActiveMask |= 1 << i;
+        omExt->mActiveMask |= BIT64(i);
         track = &omExt->mTracks[i];
         track->mAudioPlayer = NULL;    // only field that is accessed before full initialization
         interface_unlock_exclusive(omExt);

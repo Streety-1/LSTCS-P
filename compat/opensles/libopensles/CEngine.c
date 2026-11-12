@@ -59,16 +59,16 @@ void CEngine_Destroy(void *self)
 
     // Verify that there are no extant objects
     unsigned instanceCount = this->mEngine.mInstanceCount;
-    unsigned instanceMask = this->mEngine.mInstanceMask;
+    uint64_t instanceMask = this->mEngine.mInstanceMask;
     if ((0 < instanceCount) || (0 != instanceMask)) {
         SL_LOGE("Object::Destroy(%p) for engine ignored; %u total active objects",
             this, instanceCount);
         while (0 != instanceMask) {
-            unsigned i = ctz(instanceMask);
+            unsigned i = ctz64(instanceMask);
             assert(MAX_INSTANCE > i);
             SL_LOGE("Object::Destroy(%p) for engine ignored; active object ID %u at %p",
                 this, i + 1, this->mEngine.mInstances[i]);
-            instanceMask &= ~(1 << i);
+            instanceMask &= ~BIT64(i);
         }
     }
 

@@ -12,6 +12,7 @@
 #include "utils/utils.h"
 
 #include <psp2/kernel/clib.h>
+#include <psp2/kernel/processmgr.h>
 
 #define PROGRAM_UNIFORM_SPEEDHACK
 //#define SKIP_ERROR_HANDLING
@@ -258,6 +259,59 @@ void glLinkProgram_soloader(GLuint program) {
     glLinkProgram(program);
 }
 
+/*
+ * Texture memory: the game ships many textures only uncompressed (its ETC1 versions
+ * are missing, so it falls back to raw RGBA). On a phone that fits; on the Vita the
+ * first level used up every byte of graphics memory, so textures, the floor and
+ * other geometry failed to load or came out wrong. Large uncompressed uploads are now
+ * stored as DXT (vitaGL compresses them as they're uploaded): DXT5 keeps alpha at a
+ * quarter the size of RGBA8888, DXT1 is an eighth. Render targets (no pixel data) and
+ * small textures are left alone. A texture's extra mip levels follow whatever was
+ * chosen for its level 0, so every level of a texture has the same format.
+ */
+#define TEX_COMPRESS_MIN_PIXELS (128 * 128)
+#define TEX_TRACKED 65536
+static uint8_t tex_is_compressed[TEX_TRACKED / 8];
+lstcs_tex_stats_t lstcs_tex_stats;
+
+static GLint pick_texture_storage(GLuint tex, GLint level, GLint internalformat, GLsizei width, GLsizei height,
+                                  GLenum format, GLenum type, const void *pixels) {
+    const int tracked = tex < TEX_TRACKED;
+    const uint8_t bit = (uint8_t) (1u << (tex & 7));
+    int alpha;
+
+    if (format == GL_RGBA && (type == GL_UNSIGNED_BYTE || type == GL_UNSIGNED_SHORT_4_4_4_4 || type == GL_UNSIGNED_SHORT_5_5_5_1))
+        alpha = 1;
+    else if (format == GL_RGB && (type == GL_UNSIGNED_BYTE || type == GL_UNSIGNED_SHORT_5_6_5))
+        alpha = 0;
+    else {
+        if (level == 0 && tracked) tex_is_compressed[tex >> 3] &= ~bit;
+        return internalformat;
+    }
+    const int bpp = type == GL_UNSIGNED_BYTE ? (alpha ? 4 : 3) : 2;
+
+    int compress;
+    if (level == 0) {
+        compress = pixels != NULL && (int64_t) width * height >= TEX_COMPRESS_MIN_PIXELS && width >= 4 && height >= 4;
+        if (tracked) {
+            if (compress) tex_is_compressed[tex >> 3] |= bit;
+            else tex_is_compressed[tex >> 3] &= ~bit;
+        }
+    } else {
+        compress = tracked && (tex_is_compressed[tex >> 3] & bit) && pixels != NULL;
+    }
+
+    lstcs_tex_stats.uploads++;
+    lstcs_tex_stats.raw_bytes += (uint64_t) width * height * bpp;
+    if (!compress) {
+        lstcs_tex_stats.stored_bytes += (uint64_t) width * height * bpp;
+        return internalformat;
+    }
+    lstcs_tex_stats.compressed++;
+    lstcs_tex_stats.stored_bytes += (uint64_t) width * height / (alpha ? 1 : 2);
+    return alpha ? GL_COMPRESSED_RGBA_S3TC_DXT5_EXT : GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
+}
+
 void glTexImage2D_soloader(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height,
                            GLint border, GLenum format, GLenum type, const void *pixels) {
 #ifndef SKIP_ERROR_HANDLING
@@ -273,9 +327,14 @@ void glTexImage2D_soloader(GLenum target, GLint level, GLint internalformat, GLs
 
     const size_t i = target == GL_TEXTURE_2D ? 0 : 1;
     const GLuint tex = current_context->textures[current_context->texture * 2 + i];
-    if (i == 0)
-        glTextureImage2D(tex, level, internalformat, width, height, border, format, type, pixels);
-    else
+    if (i == 0) {
+        GLint stored = pick_texture_storage(tex, level, internalformat, width, height, format, type, pixels);
+        uint64_t t0 = stored != internalformat ? sceKernelGetProcessTimeWide() : 0;
+        glTextureImage2D(tex, level, stored, width, height, border, format, type, pixels);
+        if (stored != internalformat) {
+            lstcs_tex_stats.compress_us += sceKernelGetProcessTimeWide() - t0;
+        }
+    } else
         WITH_CUBE_MAP_BOUND(tex, glTexImage2D(target, level, internalformat, width, height, border, format, type,
                                               pixels));
 }

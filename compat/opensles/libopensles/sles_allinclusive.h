@@ -547,9 +547,11 @@ typedef struct Engine_interface {
 #endif
     // Each engine is its own universe.
     SLuint32 mInstanceCount;
-    unsigned mInstanceMask; // 1 bit per active object
-    unsigned mChangedMask;  // objects which have changed since last sync
-#define MAX_INSTANCE 32     // maximum active objects per engine, see mInstanceMask
+    // LSTCS-P: widened from 32 to 64 bits. The game creates more sound voices than
+    // 32 objects allowed; every extra voice failed to create and stayed silent.
+    uint64_t mInstanceMask; // 1 bit per active object
+    uint64_t mChangedMask;  // objects which have changed since last sync
+#define MAX_INSTANCE 64     // maximum active objects per engine, see mInstanceMask
     IObject *mInstances[MAX_INSTANCE];
     SLboolean mShutdown;
     SLboolean mShutdownAck;
@@ -686,7 +688,7 @@ typedef struct {
     // fields that were formerly here are now at CAudioPlayer
 } IMuteSolo;
 
-#define MAX_TRACK 32        // see mActiveMask
+#define MAX_TRACK 64        // see mActiveMask (LSTCS-P: was 32)
 
 typedef struct {
     const struct SLOutputMixItf_ *mItf;
@@ -699,7 +701,7 @@ typedef struct {
 typedef struct {
     const struct SLOutputMixExtItf_ *mItf;
     IObject *mThis;
-    unsigned mActiveMask;   // 1 bit per active track
+    uint64_t mActiveMask;   // 1 bit per active track
     Track mTracks[MAX_TRACK];
     SLboolean mDestroyRequested;    ///< Mixer to acknowledge application's call to Object::Destroy
 } IOutputMixExt;
@@ -859,7 +861,7 @@ typedef struct /*Volume_interface*/ {
     I3DDoppler m3DDoppler;
     I3DSource m3DSource;
     I3DMacroscopic m3DMacroscopic;
-    unsigned mMemberMask;   // set of member objects
+    uint64_t mMemberMask;   // set of member objects
 } /*C3DGroup*/;
 
 #ifdef ANDROID
@@ -1274,6 +1276,8 @@ extern SLresult err_to_result(int err);
 #else
 extern unsigned ctz(unsigned);
 #endif
+#define ctz64(x) ((unsigned) __builtin_ctzll(x))
+#define BIT64(i) (((uint64_t) 1) << (i))
 extern const char * const interface_names[MPH_MAX];
 #include "platform.h"
 

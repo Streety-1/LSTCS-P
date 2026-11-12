@@ -549,7 +549,7 @@ void IObject_Destroy(SLObjectItf self)
     if (0 != i) {
         --i;
         assert(0 != thisEngine->mInstanceMask);
-        thisEngine->mInstanceMask &= ~(1 << i);
+        thisEngine->mInstanceMask &= ~BIT64(i);
         assert(thisEngine->mInstances[i] == this);
         thisEngine->mInstances[i] = NULL;
     }
@@ -784,13 +784,13 @@ void IObject_Publish(IObject *this)
     IEngine *thisEngine = this->mEngine;
     interface_lock_exclusive(thisEngine);
     // construct earlier reserved a pending slot, but did not choose the actual slot number
-    unsigned availMask = ~thisEngine->mInstanceMask;
+    uint64_t availMask = ~thisEngine->mInstanceMask;
     assert(availMask);
-    unsigned i = ctz(availMask);
+    unsigned i = ctz64(availMask);
     assert(MAX_INSTANCE > i);
     assert(NULL == thisEngine->mInstances[i]);
     thisEngine->mInstances[i] = this;
-    thisEngine->mInstanceMask |= 1 << i;
+    thisEngine->mInstanceMask |= BIT64(i);
     // avoid zero as a valid instance ID
     this->mInstanceID = i + 1;
     interface_unlock_exclusive(thisEngine);

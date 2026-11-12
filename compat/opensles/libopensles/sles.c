@@ -1009,13 +1009,15 @@ IObject *construct(const ClassTable *class__, unsigned exposedMask, SLEngineItf 
             interface_lock_exclusive(thisEngine);
             if (MAX_INSTANCE <= thisEngine->mInstanceCount) {
                 SL_LOGE("Too many objects");
+                { extern void lstcs_log(const char *fmt, ...) __attribute__((weak));
+                  if (lstcs_log) lstcs_log("Audio: object limit (%d) reached, a sound could not be created", MAX_INSTANCE); }
                 interface_unlock_exclusive(thisEngine);
                 free(this);
                 return NULL;
             }
             // pre-allocate a pending slot, but don't assign bit from mInstanceMask yet
             ++thisEngine->mInstanceCount;
-            assert(((unsigned) ~0) != thisEngine->mInstanceMask);
+            assert(~((uint64_t) 0) != thisEngine->mInstanceMask);
             interface_unlock_exclusive(thisEngine);
             // const, no lock needed
             if (thisEngine->mLossOfControlGlobal) {

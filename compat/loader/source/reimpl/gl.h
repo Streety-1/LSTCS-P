@@ -8,6 +8,7 @@
 #ifndef SOLOADER_GL_H
 #define SOLOADER_GL_H
 
+#include <stdint.h>
 #include <vitaGL.h>
 
 #ifdef __cplusplus
@@ -29,6 +30,12 @@ void glClear_soloader(GLbitfield mask);
 void glDrawArrays_soloader(GLenum mode, GLint first, GLsizei count);
 void glDrawElements_soloader(GLenum mode, GLsizei count, GLenum type, const void *indices);
 extern volatile unsigned int lstcs_skipped_fbo_ops;
+
+typedef struct {
+    unsigned int uploads, compressed;
+    uint64_t raw_bytes, stored_bytes, compress_us;
+} lstcs_tex_stats_t;
+extern lstcs_tex_stats_t lstcs_tex_stats;
 GLuint glCreateShader_soloader(GLenum shaderType);
 
 void glCompressedTexImage2D_soloader(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height,

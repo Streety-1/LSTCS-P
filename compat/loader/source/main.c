@@ -11,6 +11,7 @@
 #include <vitaGL.h>
 
 #include <stdlib.h>
+#include <malloc.h>
 
 #include <psp2/ctrl.h>
 #include <psp2/power.h>
@@ -181,6 +182,11 @@ void *controls_thread() {
                       f, f - last_frames,
                       (unsigned) (vglMemFree(VGL_MEM_VRAM) / 1024), (unsigned) (vglMemFree(VGL_MEM_RAM) / 1024),
                       (unsigned) (vglMemFree(VGL_MEM_PHYCONT) / 1024), lstcs_skipped_fbo_ops);
+            struct mallinfo mi = mallinfo();
+            lstcs_log("  textures: %u uploads, %u compressed to DXT, %u MB raw -> %u MB stored, %u ms compressing | game heap used %u MB",
+                      lstcs_tex_stats.uploads, lstcs_tex_stats.compressed,
+                      (unsigned) (lstcs_tex_stats.raw_bytes >> 20), (unsigned) (lstcs_tex_stats.stored_bytes >> 20),
+                      (unsigned) (lstcs_tex_stats.compress_us / 1000), (unsigned) (mi.uordblks >> 20));
             last_frames = f;
         }
     }
